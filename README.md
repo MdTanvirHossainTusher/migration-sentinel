@@ -143,6 +143,7 @@ docs/                changelog, reproduction guide, evaluation, safety model, ho
 
 ## Documentation
 
+- [docs/API_AND_USAGE.md](docs/API_AND_USAGE.md) — **how to run it, every endpoint, request/response, curl, the flow**
 - [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md) — the improvement story, stage by stage
 - [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md) — run it from a clean machine
 - [docs/EVALUATION.md](docs/EVALUATION.md) — the metric, the rubric, the results table
