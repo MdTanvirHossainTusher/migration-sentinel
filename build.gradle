@@ -1,0 +1,152 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.4.3'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco'
+}
+
+group = 'com.migrationsentinel'
+version = '0.1.0'	// x-release-please-version
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+ext {
+	mapstructVersion = '1.6.3'
+	lombokMapstructBindingVersion = '0.2.0'
+	flywayVersion = '10.22.0'
+	springdocVersion = '2.8.4'
+	testcontainersBomVersion = '1.21.3'
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.testcontainers:testcontainers-bom:${testcontainersBomVersion}"
+	}
+}
+
+dependencies {
+	// Spring Boot starters
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+
+	// App metadata database
+	runtimeOnly 'org.postgresql:postgresql'
+	runtimeOnly 'com.h2database:h2'
+	implementation "org.flywaydb:flyway-core:${flywayVersion}"
+	implementation "org.flywaydb:flyway-database-postgresql:${flywayVersion}"
+
+	// The disposable sandbox database the agent's tools run against. Testcontainers
+	// is a RUNTIME dependency here, not just a test one: the tool layer owns the
+	// container lifecycle for every review. See docs/SAFETY_MODEL.md.
+	implementation 'org.testcontainers:testcontainers'
+	implementation 'org.testcontainers:postgresql'
+
+	// Hibernate schema validation is done with the same hibernate-core that JPA pulls
+	// in; no extra dependency. The candidate-entity DDL is generated with the Hibernate
+	// SchemaValidator API.
+
+	// OpenAPI / Swagger
+	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+	// MapStruct
+	implementation "org.mapstruct:mapstruct:${mapstructVersion}"
+
+	// Lombok
+	compileOnly 'org.projectlombok:lombok'
+
+	// Annotation processors — ORDER MATTERS
+	annotationProcessor 'org.projectlombok:lombok'
+	annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
+	annotationProcessor "org.projectlombok:lombok-mapstruct-binding:${lombokMapstructBindingVersion}"
+
+	// Test dependencies
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.testcontainers:junit-jupiter'
+	testImplementation 'org.testcontainers:postgresql'
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+}
+
+tasks.named('compileJava') {
+	options.compilerArgs += [
+			'-Amapstruct.defaultComponentModel=spring',
+			'-Amapstruct.unmappedTargetPolicy=IGNORE'
+	]
+}
+
+tasks.named('test') {
+	useJUnitPlatform {
+		excludeTags 'sandbox'
+	}
+}
+
+// Integration tests that spin up a real Testcontainers Postgres sandbox.
+// Kept out of the default `test` run so unit tests stay fast and Docker-free.
+tasks.register('sandboxTest', Test) {
+	description = 'Runs tests tagged "sandbox" (need a Docker daemon)'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'sandbox'
+	}
+	// Docker Engine 25+ rejects the docker-java default API version (1.32) with HTTP 400.
+	// Pin a version the daemon's minimum (1.40+) accepts. Overridable via the environment.
+	environment 'DOCKER_API_VERSION', System.getenv('DOCKER_API_VERSION') ?: '1.44'
+	shouldRunAfter tasks.named('test')
+}
+
+def resourceProjectVersion = version.toString()
+
+processResources {
+	filesMatching('*.yaml') {
+		filter(org.apache.tools.ant.filters.ReplaceTokens,
+				beginToken: '@', endToken: '@',
+				tokens: ['project.version': resourceProjectVersion])
+	}
+}
+
+// ─── JaCoCo ─────────────────────────────────────────────────────────────────
+
+jacoco {
+	toolVersion = '0.8.12'
+}
+
+tasks.named('test') {
+	finalizedBy tasks.named('jacocoTestReport')
+}
+
+jacocoTestReport {
+	dependsOn tasks.named('test')
+	reports {
+		xml.required = true
+		html.required = true
+	}
+	afterEvaluate {
+		classDirectories.setFrom(files(classDirectories.files.collect {
+			fileTree(dir: it, exclude: [
+					'**/config/**',
+					'**/exception/**',
+					'**/model/**',
+					'**/payload/**',
+					'**/*Application*',
+					'**/*MapperImpl*',
+			])
+		}))
+	}
+}
