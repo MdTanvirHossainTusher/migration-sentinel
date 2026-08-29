@@ -28,6 +28,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: sentinel-backend
+    # The image runs as an unprivileged user, but the mounted Docker socket is root-owned,
+    # so the Testcontainers sandbox can't reach the daemon without this. Local stack only.
+    user: root
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,10 +43,14 @@ services:
       CORS_ALLOWED_ORIGIN: http://localhost:3000
       SENTINEL_LLM_PROVIDER: ${SENTINEL_LLM_PROVIDER:-heuristic}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       # Testcontainers inside the container talks to the host daemon via the mounted socket.
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
       DOCKER_HOST: unix:///var/run/docker.sock
+      # docker-java defaults to API 1.32, which Docker Engine 25+ rejects with HTTP 400.
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.44}
     ports:
       - "8080:8080"
       - "9091:9091"
@@ -51,14 +58,26 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9091/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Next freezes the /proxy rewrite target at build time — must be the compose hostname.
+        API_BASE_URL_INTERNAL: http://backend:8080
+        # Browser-side base (used only for the direct "API / Swagger" link).
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
     container_name: sentinel-frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       # Browser calls the API directly on the host; SSR calls it over the compose network.
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8080

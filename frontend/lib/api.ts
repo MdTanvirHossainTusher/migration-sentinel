@@ -143,9 +143,18 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiEnvelope<T>
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     cache: "no-store",
   });
-  const body = (await res.json()) as ApiEnvelope<T>;
-  if (!res.ok || body.success === false) {
-    throw new Error(body.error?.message || body.message || `Request failed (${res.status})`);
+  const raw = await res.text();
+  let body: ApiEnvelope<T> | null = null;
+  try {
+    body = raw ? (JSON.parse(raw) as ApiEnvelope<T>) : null;
+  } catch {
+    // Non-JSON body — usually the proxy or backend is down and returned an HTML/text error page.
+    throw new Error(
+      `API returned a non-JSON response (${res.status}). Is the backend up? ${raw.slice(0, 120)}`.trim(),
+    );
+  }
+  if (!res.ok || !body || body.success === false) {
+    throw new Error(body?.error?.message || body?.message || `Request failed (${res.status})`);
   }
   return body;
 }
@@ -161,7 +170,19 @@ export const api = {
     entitySource?: string;
     mode: ReviewMode;
     provider: string;
-  }) => call<Review>("/reviews", { method: "POST", body: JSON.stringify(payload) }).then((r) => r.data),
+  }) =>
+    call<Review>("/reviews", {
+      method: "POST",
+      body: JSON.stringify({
+        filename: payload.filename || undefined,
+        migration_sql: payload.migrationSql,
+        baseline_sql: payload.baselineSql || undefined,
+        seed_sql: payload.seedSql || undefined,
+        entity_source: payload.entitySource || undefined,
+        mode: payload.mode,
+        provider: payload.provider,
+      }),
+    }).then((r) => r.data),
 
   getReview: (id: string) => call<Review>(`/reviews/${id}`).then((r) => r.data),
   getReport: (id: string) => call<ReviewReport>(`/reviews/${id}/report`).then((r) => r.data),
@@ -173,10 +194,27 @@ export const api = {
     approvedBy: string;
     note?: string;
     confirm: boolean;
-  }) => call("/reviews/rewrites/apply", { method: "POST", body: JSON.stringify(payload) }),
+  }) =>
+    call("/reviews/rewrites/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        finding_id: payload.findingId,
+        target_filename: payload.targetFilename,
+        approved_by: payload.approvedBy,
+        note: payload.note || undefined,
+        confirm: payload.confirm,
+      }),
+    }),
 
   runEvaluation: (payload: { mode: ReviewMode; provider: string; corpusLabel?: string }) =>
-    call<EvaluationRun>("/evaluations", { method: "POST", body: JSON.stringify(payload) }).then((r) => r.data),
+    call<EvaluationRun>("/evaluations", {
+      method: "POST",
+      body: JSON.stringify({
+        mode: payload.mode,
+        provider: payload.provider,
+        corpus_label: payload.corpusLabel || undefined,
+      }),
+    }).then((r) => r.data),
   getEvaluation: (id: string) => call<EvaluationDetail>(`/evaluations/${id}`).then((r) => r.data),
   listEvaluations: () => call<EvaluationRun[]>("/evaluations?size=30").then((r) => r.data),
   listCases: () => call<EvaluationCaseMeta[]>("/evaluations/cases").then((r) => r.data),

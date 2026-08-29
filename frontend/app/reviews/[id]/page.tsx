@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, Finding, ReviewReport } from "@/lib/api";
+import { CodeBlock } from "@/lib/CodeBlock";
 
 export default function ReviewDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -100,18 +101,20 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
                     </span>
                   </div>
                   {t.arguments_json && t.arguments_json !== "{}" && (
-                    <pre>args: {t.arguments_json}</pre>
+                    <CodeBlock code={prettyJson(t.arguments_json)} language="json" label="args" copy={false} />
                   )}
                   <details>
                     <summary className="muted">tool result</summary>
-                    <pre>{prettyJson(t.result_json)}</pre>
+                    <CodeBlock code={prettyJson(t.result_json)} language="json" label="result" />
                   </details>
                 </div>
               ))}
             </div>
           )}
 
-          {tab === "markdown" && <pre>{report.report_markdown}</pre>}
+          {tab === "markdown" && (
+            <CodeBlock code={report.report_markdown} language="plaintext" label="report.md" />
+          )}
         </>
       )}
     </>
@@ -158,20 +161,14 @@ function FindingCard({ f }: { f: Finding }) {
       {f.evidence && (
         <>
           <h3>Evidence</h3>
-          <pre>{f.evidence}</pre>
+          <CodeBlock code={f.evidence} language="sql" label="evidence" />
         </>
       )}
       {f.suggested_rewrite && (
         <>
           <h3>Suggested rewrite</h3>
-          <pre>{f.suggested_rewrite}</pre>
+          <CodeBlock code={f.suggested_rewrite} language="sql" label="rewrite.sql" />
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              className="secondary"
-              onClick={() => navigator.clipboard?.writeText(f.suggested_rewrite || "")}
-            >
-              Copy
-            </button>
             <button className="secondary" onClick={apply} disabled={!!applied}>
               Apply to file…
             </button>

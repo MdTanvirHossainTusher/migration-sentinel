@@ -17,7 +17,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav>
               <Link href="/">Review</Link>
               <Link href="/evaluations">Evaluation</Link>
-              <a href="/proxy/swagger-ui.html" target="_blank" rel="noreferrer">
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"}/swagger-ui.html`}
+                target="_blank"
+                rel="noreferrer"
+              >
                 API
               </a>
             </nav>

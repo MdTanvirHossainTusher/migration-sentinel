@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 FROM node:20-alpine AS builder
 WORKDIR /app
+# Next bakes rewrites() into the build, so the proxy target must be known at build time.
+ARG API_BASE_URL_INTERNAL=http://backend:8080
+ENV API_BASE_URL_INTERNAL=$API_BASE_URL_INTERNAL
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
