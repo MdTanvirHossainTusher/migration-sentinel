@@ -1,0 +1,20 @@
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+.idea/
+*.iml
+out/
+.vscode/
+.env
+HELP.md
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+npm-debug.log*
+
+# Runtime output
+/rewrites/
+*.log
