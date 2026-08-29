@@ -1,0 +1,70 @@
+# Migration Sentinel — one-command local stack.
+#   docker compose up --build
+# Then: frontend http://localhost:3000, API http://localhost:8080/swagger-ui.html
+#
+# The backend needs a Docker daemon for the Testcontainers sandbox, so the host's
+# Docker socket is mounted in. Everything else is self-contained.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_DB: sentinel_db
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: sentinel
+    ports:
+      - "5440:5432"
+    volumes:
+      - sentinel_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d sentinel_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentinel-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sentinel_db
+      DB_USERNAME: sentinel
+      DB_PASSWORD: sentinel
+      CORS_ALLOWED_ORIGIN: http://localhost:3000
+      SENTINEL_LLM_PROVIDER: ${SENTINEL_LLM_PROVIDER:-heuristic}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Testcontainers inside the container talks to the host daemon via the mounted socket.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      DOCKER_HOST: unix:///var/run/docker.sock
+    ports:
+      - "8080:8080"
+      - "9091:9091"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sentinel-frontend
+    depends_on:
+      - backend
+    environment:
+      # Browser calls the API directly on the host; SSR calls it over the compose network.
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+      API_BASE_URL_INTERNAL: http://backend:8080
+    ports:
+      - "3000:3000"
+
+volumes:
+  sentinel_pg:

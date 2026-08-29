@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: Backend — unit tests
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Unit tests (no Docker)
+        run: ./gradlew test -x jacocoTestReport
+
+  sandbox:
+    name: Backend — sandbox integration tests
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      # ubuntu-latest ships a running Docker daemon, so Testcontainers works here.
+      - name: Sandbox tests (Testcontainers)
+        run: ./gradlew sandboxTest
+
+  evaluation:
+    name: Evaluation smoke (heuristic, offline)
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run the corpus through the baseline and the full agent, assert the agent wins
+        run: ./gradlew sandboxTest --tests '*EvaluationHarnessTest*'
+
+  frontend:
+    name: Frontend — build
+    runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run build

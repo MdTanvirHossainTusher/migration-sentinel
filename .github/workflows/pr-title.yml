@@ -1,0 +1,25 @@
+name: Conventional PR title
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a release-please-compatible title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|docs|refactor|style|test|build|ci|chore)(\([A-Za-z0-9._/-]+\))?!?: [^[:space:]].*$'
+          if [[ ! "$PR_TITLE" =~ $pattern ]]; then
+            echo "Invalid PR title: $PR_TITLE"
+            echo "Use a Conventional Commit title, e.g. 'feat: add verifier agent'"
+            exit 1
+          fi
+          echo "OK: $PR_TITLE"
