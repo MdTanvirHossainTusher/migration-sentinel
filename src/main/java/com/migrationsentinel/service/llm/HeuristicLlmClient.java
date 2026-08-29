@@ -7,6 +7,7 @@ import com.migrationsentinel.config.properties.SentinelProperties;
 import com.migrationsentinel.model.enums.RuleCode;
 import com.migrationsentinel.payload.dto.ProposedFinding;
 import com.migrationsentinel.payload.dto.SchemaDriftReport;
+import com.migrationsentinel.service.agent.PromptLibrary;
 import com.migrationsentinel.service.agent.ToolSpec;
 import com.migrationsentinel.service.rules.SchemaFacts;
 import com.migrationsentinel.service.rules.StaticRuleScanner;
@@ -59,7 +60,7 @@ public class HeuristicLlmClient implements LlmClient {
         String systemPrompt = messages.stream()
                 .filter(m -> m.role() == LlmMessage.Role.SYSTEM)
                 .map(LlmMessage::content).findFirst().orElse("");
-        boolean verifier = systemPrompt.toLowerCase().contains("verifier");
+        boolean verifier = systemPrompt.contains(PromptLibrary.ROLE_VERIFIER);
 
         if (tools.isEmpty() && !verifier) {
             return LlmResponse.finalAnswer(buildStructuralFindings(userText(messages)));

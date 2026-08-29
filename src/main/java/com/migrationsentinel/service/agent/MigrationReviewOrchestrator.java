@@ -101,7 +101,9 @@ public class MigrationReviewOrchestrator {
         String raw = agentLoop.run(AgentRole.ANALYZER, client,
                 prompts.analyzerSystemPrompt(), prompts.reviewUserPrompt(input),
                 specs, recorder);
-        return agentJson.parseFindings(raw);
+        List<ProposedFinding> parsed = agentJson.parseFindings(raw);
+        log.debug("analyzer[{}] parsed {} finding(s)", mode, parsed.size());
+        return parsed;
     }
 
     private List<VerifiedFinding> runSelfVerification(MigrationInput input, LlmClient client, Toolbox toolbox,

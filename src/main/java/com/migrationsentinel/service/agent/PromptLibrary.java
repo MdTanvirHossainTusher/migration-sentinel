@@ -26,16 +26,25 @@ public class PromptLibrary {
     private final String verifierTemplate = load("prompts/verifier.md");
     private final String baselineTemplate = load("prompts/baseline.md");
 
+    /**
+     * A machine marker on the first line of every system prompt. The offline heuristic
+     * client keys its behaviour off this rather than off prose in the prompt body
+     * (which mentions other roles by name).
+     */
+    public static final String ROLE_ANALYZER = "[[SENTINEL_ROLE:ANALYZER]]";
+    public static final String ROLE_VERIFIER = "[[SENTINEL_ROLE:VERIFIER]]";
+    public static final String ROLE_BASELINE = "[[SENTINEL_ROLE:BASELINE]]";
+
     public String analyzerSystemPrompt() {
-        return analyzerTemplate.replace("{{RULE_CATALOGUE}}", ruleCatalogue());
+        return ROLE_ANALYZER + "\n" + analyzerTemplate.replace("{{RULE_CATALOGUE}}", ruleCatalogue());
     }
 
     public String verifierSystemPrompt() {
-        return verifierTemplate;
+        return ROLE_VERIFIER + "\n" + verifierTemplate;
     }
 
     public String baselineSystemPrompt() {
-        return baselineTemplate;
+        return ROLE_BASELINE + "\n" + baselineTemplate;
     }
 
     public String reviewUserPrompt(MigrationInput input) {
