@@ -22,7 +22,7 @@ Not a better prompt. A tool that returns `5000000` or `0`. The moment the agent 
 finding now says "sandbox: invoices holds 5000000 rows" and a human can verify that number
 in one query.
 
-The single biggest jump on our improvement curve (F1 0.82 → 0.96) was adding read-only
+The single biggest jump on our improvement curve (F1 0.81 -> 0.96) was adding read-only
 database introspection. Every prompt iteration we tried before that moved F1 by less than
 0.03 combined.
 

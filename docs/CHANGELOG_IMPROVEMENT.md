@@ -15,7 +15,7 @@ regression fails CI.
 
 | Stage | What changed | P | R | F1 | FP/case | Cases passed |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 · Baseline | One prompt, migration SQL only, no tools | 0.79 | 0.85 | 0.82 | 0.20 | 12 / 15 |
+| 0 · Baseline | One prompt, migration SQL only, no tools | 0.79 | 0.85 | 0.81 | 0.20 | 12 / 15 |
 | 1 · + schema introspection | Agent can read the seeded DB (row estimates, indexes, FKs) but not run the migration | 1.00 | 0.92 | 0.96 | 0.00 | 14 / 15 |
 | 2 · + sandbox migration run | Agent replays baseline + seed, then runs the candidate statement-by-statement; drift check now works | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 3 · + verification pass | Every finding must cite tool output or it is dropped / flagged UNVERIFIED | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
@@ -29,7 +29,7 @@ regression fails CI.
 prompt and ask for the production risks. This is what a careful engineer does in their head
 during code review, and what a naive "add an LLM" integration would ship.
 
-**Evidence.** F1 0.82, recall 0.85, 0.20 false positives per case. It gets the
+**Evidence.** F1 0.81, recall 0.85, 0.20 false positives per case. It gets the
 structure-only cases right — a `DROP COLUMN` is a `DROP COLUMN` — but it fails on exactly
 the cases that need data:
 
@@ -88,11 +88,14 @@ sometimes asserts things it did not check — "this locks a large table" without
 `UNVERIFIED` if it's structurally plausible but unproven.
 
 **Evidence.** On the deterministic corpus the analyzer already grounds every finding, so
-the numbers don't move — stages 2–4 are identical here. The pass earns its place under
-adversarial input: in the OpenAI trajectories (`docs/AGENT_TRAJECTORIES.md`) it caught two
-ungrounded severity claims across the corpus that would otherwise have been false positives.
-It also standardises the report: every finding now carries a `CONFIRMED` / `UNVERIFIED`
-badge a reviewer can trust.
+the numbers don't move — stages 2–4 are identical here (confirmed by the harness:
+`ANALYZER_WITH_SANDBOX`, `ANALYZER_VERIFIED` and `ANALYZER_VERIFIER_SPLIT` all score
+P/R/F1 = 1.00, 15/15). What the pass changes deterministically is the report: every
+finding now carries a `CONFIRMED` badge (tool evidence attached) or `UNVERIFIED` (kept but
+flagged), and any finding whose rule code is not in the catalogue is dropped outright. Its
+value scales with the messiness of the analyzer: with `provider=openai` the analyzer
+occasionally asserts a lock class or a table size it never checked, and this pass is what
+keeps those out of the report (see `docs/AGENT_TRAJECTORIES.md` for how to capture one).
 
 **Decision.** Kept. Zero cost on clean input, real protection on messy input.
 

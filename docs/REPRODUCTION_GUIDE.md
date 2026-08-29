@@ -78,7 +78,7 @@ Expected: one `NOT_NULL_WITHOUT_SAFE_BACKFILL` finding, severity `HIGH`, verdict
 
   ```
   stage                            P      R     F1    FP/case   passed
-  BASELINE_PROMPT                 0.79   0.85   0.82     0.20     12/15
+  BASELINE_PROMPT                 0.79   0.85   0.81     0.20     12/15
   ANALYZER_READ_ONLY             1.00   0.92   0.96     0.00     14/15
   ANALYZER_WITH_SANDBOX          1.00   1.00   1.00     0.00     15/15
   ANALYZER_VERIFIED             1.00   1.00   1.00     0.00     15/15
@@ -113,7 +113,7 @@ All synthetic. The 15 cases build their own schemas and seed their own rows; the
 
 | Symptom | Fix |
 | --- | --- |
-| `health` shows `docker_available: false` | Start Docker. Structure-only review still works; sandbox stages don't |
+| `health` shows `dockerAvailable: false` | Start Docker. Structure-only review still works; sandbox stages don't |
 | `SANDBOX_UNAVAILABLE` on a review | Same — the Docker daemon isn't reachable from the backend |
 | Backend can't reach Postgres in Compose | `docker compose down -v` then `up` again |
 | Sandbox container image pull is slow | `docker pull postgres:16-alpine` once beforehand |

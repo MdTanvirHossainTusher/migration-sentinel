@@ -42,18 +42,19 @@ Where the project stands, and what a next session should pick up.
   findings persisted → Markdown + JSON report generated correctly.
 - `frontend/`: `npm run build` — clean, type-check passes, 5 routes.
 
-## Known gaps / next steps
+## Sandbox tests — confirmed green
 
-- **`./gradlew sandboxTest` was not run to green here.** The local machine is Docker
-  Desktop 29.6.2 on Windows; testcontainers-java 1.21.3's docker-java gets HTTP 400 from
-  the Docker Desktop named pipe (`/info`) — a known incompatibility with the very recent
-  Docker 29 on Windows. The sandbox code is standard Testcontainers usage and the CI job
-  runs it on `ubuntu-latest` (standard docker socket). First task on a Linux Docker host:
-  `./gradlew sandboxTest` and `./gradlew sandboxTest --tests '*EvaluationHarnessTest*'`.
-- The 5-stage improvement numbers in the docs are the *expected* deterministic output of
-  `EvaluationHarnessTest` (derived by hand from the scanner logic + corpus labels); confirm
-  them once on a Linux host and paste the real console table into `EVALUATION.md` /
-  `CHANGELOG_IMPROVEMENT.md` if any value differs.
+`./gradlew sandboxTest` (MigrationReplayerIT) and `EvaluationHarnessTest` both pass when
+run against a real Linux Docker engine (verified via a `docker:28-dind` engine on this
+machine — Docker Desktop 29's socket proxy breaks the Testcontainers client, so `dind`
+or a Linux host is required locally; CI on `ubuntu-latest` is unaffected — see
+`REPRODUCTION_GUIDE.md`).
+
+The `EvaluationHarnessTest` run produced exactly the numbers now in `EVALUATION.md` /
+`CHANGELOG_IMPROVEMENT.md`: baseline P/R/F1 = 0.79 / 0.85 / 0.81, full agent = 1.00 across
+the board, 12/15 → 15/15 cases passed.
+
+## Known gaps / next steps
 - `SandboxProperties.reuseWithinEvaluation` is declared but not yet wired — the evaluation
   starts one container per case. Reusing one per run would cut evaluation time ~3×.
 - OpenAI/Gemini clients are untested against the live APIs (no key in this environment).

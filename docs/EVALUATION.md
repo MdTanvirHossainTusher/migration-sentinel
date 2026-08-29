@@ -73,13 +73,22 @@ severity matches. Unmatched reported findings are **false positives**; unmatched
 
 Run `./gradlew sandboxTest --tests '*EvaluationHarnessTest*'`. It executes all five pipeline
 stages over the corpus with the offline heuristic brain and prints the table. Deterministic
-— same numbers every run, no API key.
+— same numbers every run, no API key. Last confirmed run (Linux Docker engine, ~4.5 min):
+
+```
+stage                              P      R     F1    FP/case   passed
+BASELINE_PROMPT                 0.79   0.85   0.81       0.20     12/15
+ANALYZER_READ_ONLY             1.00   0.92   0.96       0.00     14/15
+ANALYZER_WITH_SANDBOX          1.00   1.00   1.00       0.00     15/15
+ANALYZER_VERIFIED             1.00   1.00   1.00       0.00     15/15
+ANALYZER_VERIFIER_SPLIT       1.00   1.00   1.00       0.00     15/15
+```
 
 | Metric | Baseline (prompt) | Full agent | Change |
 | --- | --- | --- | --- |
 | Recall | 0.85 | 1.00 | +0.15 |
 | Precision | 0.79 | 1.00 | +0.21 |
-| F1 | 0.82 | 1.00 | +0.18 |
+| F1 | 0.81 | 1.00 | +0.19 |
 | False positives / case | 0.20 | 0.00 | −0.20 |
 | Cases passed | 12 / 15 | 15 / 15 | +3 |
 | Human time / case | ~4 min eye-scan, misses data-scale issues | ~0 (read the report) | — |
