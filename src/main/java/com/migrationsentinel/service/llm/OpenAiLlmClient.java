@@ -1,0 +1,148 @@
+package com.migrationsentinel.service.llm;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.migrationsentinel.config.properties.LlmProperties;
+import com.migrationsentinel.exception.LlmProviderException;
+import com.migrationsentinel.service.agent.ToolSpec;
+import com.migrationsentinel.service.support.AgentJsonMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.ArrayList;
+import java.util.List;
+
+/** OpenAI Chat Completions client with function calling. Raw HTTP — no SDK dependency. */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OpenAiLlmClient implements LlmClient {
+
+    private final LlmProperties properties;
+    private final AgentJsonMapper mapper;
+    private final HttpClient http = HttpClient.newHttpClient();
+
+    @Override
+    public String provider() {
+        return "openai";
+    }
+
+    @Override
+    public boolean available() {
+        return properties.getOpenai().getApiKey() != null && !properties.getOpenai().getApiKey().isBlank();
+    }
+
+    @Override
+    public LlmResponse chat(List<LlmMessage> messages, List<ToolSpec> tools) {
+        if (!available()) {
+            throw new LlmProviderException("OpenAI API key is not configured (sentinel.llm.openai.api-key)");
+        }
+        try {
+            ObjectNode body = mapper.createObjectNode();
+            body.put("model", properties.getOpenai().getModel());
+            body.put("temperature", 0);
+            body.set("messages", encodeMessages(messages));
+            if (tools != null && !tools.isEmpty()) {
+                body.set("tools", encodeTools(tools));
+                body.put("tool_choice", "auto");
+            }
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(properties.getOpenai().getBaseUrl() + "/chat/completions"))
+                    .timeout(properties.getRequestTimeout())
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + properties.getOpenai().getApiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                    .build();
+
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() / 100 != 2) {
+                throw new LlmProviderException("OpenAI returned HTTP " + response.statusCode() + ": "
+                        + truncate(response.body()));
+            }
+            JsonNode message = mapper.readTree(response.body()).path("choices").path(0).path("message");
+            List<LlmToolCall> calls = new ArrayList<>();
+            for (JsonNode tc : message.path("tool_calls")) {
+                calls.add(new LlmToolCall(
+                        tc.path("id").asText(),
+                        tc.path("function").path("name").asText(),
+                        tc.path("function").path("arguments").asText("{}")));
+            }
+            if (!calls.isEmpty()) {
+                return LlmResponse.callTools(calls);
+            }
+            return LlmResponse.finalAnswer(message.path("content").asText(""));
+        } catch (LlmProviderException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new LlmProviderException("OpenAI request failed: " + e.getMessage());
+        }
+    }
+
+    private ArrayNode encodeMessages(List<LlmMessage> messages) {
+        ArrayNode arr = mapper.createArrayNode();
+        for (LlmMessage m : messages) {
+            ObjectNode node = mapper.createObjectNode();
+            switch (m.role()) {
+                case SYSTEM -> {
+                    node.put("role", "system");
+                    node.put("content", m.content());
+                }
+                case USER -> {
+                    node.put("role", "user");
+                    node.put("content", m.content());
+                }
+                case ASSISTANT -> {
+                    node.put("role", "assistant");
+                    node.put("content", m.content() == null ? "" : m.content());
+                    if (!m.toolCalls().isEmpty()) {
+                        ArrayNode tcs = mapper.createArrayNode();
+                        for (LlmToolCall tc : m.toolCalls()) {
+                            ObjectNode t = mapper.createObjectNode();
+                            t.put("id", tc.id());
+                            t.put("type", "function");
+                            ObjectNode fn = mapper.createObjectNode();
+                            fn.put("name", tc.name());
+                            fn.put("arguments", tc.argumentsJson());
+                            t.set("function", fn);
+                            tcs.add(t);
+                        }
+                        node.set("tool_calls", tcs);
+                    }
+                }
+                case TOOL -> {
+                    node.put("role", "tool");
+                    node.put("tool_call_id", m.toolCallId());
+                    node.put("content", m.content());
+                }
+            }
+            arr.add(node);
+        }
+        return arr;
+    }
+
+    private ArrayNode encodeTools(List<ToolSpec> tools) {
+        ArrayNode arr = mapper.createArrayNode();
+        for (ToolSpec spec : tools) {
+            ObjectNode t = mapper.createObjectNode();
+            t.put("type", "function");
+            ObjectNode fn = mapper.createObjectNode();
+            fn.put("name", spec.name());
+            fn.put("description", spec.description());
+            fn.set("parameters", mapper.valueToTree(spec.parameters()));
+            t.set("function", fn);
+            arr.add(t);
+        }
+        return arr;
+    }
+
+    private String truncate(String s) {
+        return s == null ? "" : s.length() > 400 ? s.substring(0, 400) : s;
+    }
+}
