@@ -1,0 +1,6 @@
+{
+  "expected": [
+    { "ruleCode": "NON_CONCURRENT_INDEX", "targetObject": "orders", "severity": "HIGH" }
+  ],
+  "mustBeClean": false
+}

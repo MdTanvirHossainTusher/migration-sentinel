@@ -1,0 +1,3 @@
+{ "title": "Rename a column during a rolling deploy",
+  "description": "RENAME COLUMN full_name TO display_name breaks every query from pods still on the old code until the rollout finishes.",
+  "hard": false }

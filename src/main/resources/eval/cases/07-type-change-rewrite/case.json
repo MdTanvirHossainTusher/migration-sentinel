@@ -1,0 +1,3 @@
+{ "title": "ALTER COLUMN TYPE that rewrites the table",
+  "description": "Changing money_cents from integer to bigint rewrites every row and dependent index under ACCESS EXCLUSIVE.",
+  "hard": false }

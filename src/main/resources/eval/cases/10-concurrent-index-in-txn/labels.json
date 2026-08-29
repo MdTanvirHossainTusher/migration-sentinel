@@ -1,0 +1,1 @@
+{ "expected": [ { "ruleCode": "UNSAFE_IN_TRANSACTION", "targetObject": "sessions" } ], "mustBeClean": false }

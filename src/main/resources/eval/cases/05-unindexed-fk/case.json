@@ -1,0 +1,5 @@
+{
+  "title": "New foreign key column with no covering index",
+  "description": "A shipments.order_id FK is added but no index. Deleting an order then seq-scans shipments; ORM lazy loads do too.",
+  "hard": false
+}

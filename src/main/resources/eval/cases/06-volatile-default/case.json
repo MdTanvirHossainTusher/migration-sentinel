@@ -1,0 +1,3 @@
+{ "title": "ADD COLUMN with a volatile DEFAULT on a large table",
+  "description": "ADD COLUMN ... DEFAULT gen_random_uuid() rewrites every row under ACCESS EXCLUSIVE — a constant default would be metadata-only.",
+  "hard": false }

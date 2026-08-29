@@ -1,0 +1,1 @@
+{ "expected": [ { "ruleCode": "CONSTRAINT_VALIDATION_LOCK", "targetObject": "postings" } ], "mustBeClean": false }

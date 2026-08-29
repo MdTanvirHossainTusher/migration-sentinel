@@ -1,0 +1,5 @@
+{
+  "title": "SET NOT NULL on a 5M-row table",
+  "description": "Identical SQL to case 04, but here the table is populated. SET NOT NULL scans every row under ACCESS EXCLUSIVE — an outage. Only a reviewer that measured the table can tell this apart from case 04.",
+  "hard": true
+}

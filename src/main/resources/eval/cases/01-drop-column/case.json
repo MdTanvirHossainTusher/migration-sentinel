@@ -1,0 +1,5 @@
+{
+  "title": "Drop a column that code may still read",
+  "description": "A migration drops customers.legacy_ref. Irreversible, and any pod still selecting the column errors the moment it commits.",
+  "hard": false
+}

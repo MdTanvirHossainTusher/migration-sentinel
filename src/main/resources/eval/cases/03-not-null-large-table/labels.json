@@ -1,0 +1,6 @@
+{
+  "expected": [
+    { "ruleCode": "NOT_NULL_WITHOUT_SAFE_BACKFILL", "targetObject": "invoices.tax_region", "severity": "HIGH" }
+  ],
+  "mustBeClean": false
+}

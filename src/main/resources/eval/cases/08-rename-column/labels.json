@@ -1,0 +1,1 @@
+{ "expected": [ { "ruleCode": "BACKWARD_INCOMPATIBLE_RENAME", "targetObject": "profiles", "severity": "HIGH" } ], "mustBeClean": false }

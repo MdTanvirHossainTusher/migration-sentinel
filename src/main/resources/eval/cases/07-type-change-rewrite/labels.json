@@ -1,0 +1,1 @@
+{ "expected": [ { "ruleCode": "TABLE_REWRITE_TYPE_CHANGE", "targetObject": "ledger.money_cents", "severity": "HIGH" } ], "mustBeClean": false }

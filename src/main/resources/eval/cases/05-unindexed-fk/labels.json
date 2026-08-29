@@ -1,0 +1,6 @@
+{
+  "expected": [
+    { "ruleCode": "UNINDEXED_FOREIGN_KEY", "targetObject": "shipments.order_id", "severity": "MEDIUM" }
+  ],
+  "mustBeClean": false
+}

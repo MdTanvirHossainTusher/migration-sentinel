@@ -1,0 +1,3 @@
+{ "title": "Migration and JPA entity disagree",
+  "description": "The migration adds users.display_name as NULLABLE, but the entity maps it nullable=false. Hibernate validate fails the app boot right after the migration commits.",
+  "hard": false }

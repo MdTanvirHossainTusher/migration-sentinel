@@ -1,0 +1,3 @@
+{ "title": "SET NOT NULL done the safe way on a large table",
+  "description": "CHECK (col IS NOT NULL) NOT VALID, then VALIDATE CONSTRAINT, then SET NOT NULL which reuses the validated constraint and skips the full scan. Report should be clean.",
+  "hard": false }

@@ -1,0 +1,3 @@
+{ "title": "CREATE INDEX CONCURRENTLY without opting out of the transaction",
+  "description": "Flyway wraps the migration in a transaction by default; CREATE INDEX CONCURRENTLY errors there. Needs -- flyway:executeInTransaction=false.",
+  "hard": false }

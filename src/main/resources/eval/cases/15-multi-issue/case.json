@@ -1,0 +1,3 @@
+{ "title": "One migration, three production hazards",
+  "description": "Drops a column, adds a non-concurrent index to an 11M-row table, and adds an unindexed foreign key. A reviewer must catch all three, not just the first.",
+  "hard": true }

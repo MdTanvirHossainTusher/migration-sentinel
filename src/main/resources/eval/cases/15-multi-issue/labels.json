@@ -1,0 +1,8 @@
+{
+  "expected": [
+    { "ruleCode": "DESTRUCTIVE_DDL", "targetObject": "documents.legacy_blob_ref", "severity": "HIGH" },
+    { "ruleCode": "NON_CONCURRENT_INDEX", "targetObject": "documents", "severity": "HIGH" },
+    { "ruleCode": "UNINDEXED_FOREIGN_KEY", "targetObject": "documents.tenant_id", "severity": "MEDIUM" }
+  ],
+  "mustBeClean": false
+}

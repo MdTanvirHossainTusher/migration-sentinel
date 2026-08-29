@@ -1,0 +1,3 @@
+{ "title": "Add a foreign key and validate it in one step",
+  "description": "ADD CONSTRAINT ... FOREIGN KEY without NOT VALID validates every existing row while holding a strong lock. Split with NOT VALID + VALIDATE CONSTRAINT.",
+  "hard": false }

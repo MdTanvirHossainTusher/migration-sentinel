@@ -1,0 +1,1 @@
+ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL;

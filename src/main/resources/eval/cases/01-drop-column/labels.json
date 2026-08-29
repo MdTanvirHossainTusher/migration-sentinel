@@ -1,0 +1,6 @@
+{
+  "expected": [
+    { "ruleCode": "DESTRUCTIVE_DDL", "targetObject": "customers.legacy_ref", "severity": "HIGH" }
+  ],
+  "mustBeClean": false
+}

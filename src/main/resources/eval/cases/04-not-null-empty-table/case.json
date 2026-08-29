@@ -1,0 +1,5 @@
+{
+  "title": "SET NOT NULL on an empty table",
+  "description": "Identical SQL to case 03. The table is empty in this scenario, so SET NOT NULL is instant and safe. A prompt-only reviewer flags it HIGH; a reviewer that ran the sandbox sees zero rows and stays quiet.",
+  "hard": true
+}

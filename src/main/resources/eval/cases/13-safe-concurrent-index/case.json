@@ -1,0 +1,3 @@
+{ "title": "CREATE INDEX CONCURRENTLY in its own out-of-transaction migration",
+  "description": "The safe way to add an index to a large table. The file opts out of the wrapping transaction. The report should be clean.",
+  "hard": false }

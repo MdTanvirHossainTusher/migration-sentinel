@@ -1,0 +1,3 @@
+{ "title": "Add a nullable column with no default",
+  "description": "The textbook safe change: metadata-only, no lock of consequence, no backfill. The report should be clean.",
+  "hard": false }

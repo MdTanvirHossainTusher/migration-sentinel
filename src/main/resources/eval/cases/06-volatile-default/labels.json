@@ -1,0 +1,1 @@
+{ "expected": [ { "ruleCode": "ADD_COLUMN_VOLATILE_DEFAULT", "targetObject": "events.trace_id", "severity": "HIGH" } ], "mustBeClean": false }
