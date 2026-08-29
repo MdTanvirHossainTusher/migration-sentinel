@@ -44,6 +44,12 @@ public class RewriteApplyService {
             throw new BadResourceRequestException(
                     "Applying rewrites to disk is disabled. Set sentinel.rewrite-apply-enabled=true to allow it.");
         }
+        if (!request.confirm()) {
+            throw new BadResourceRequestException("confirm must be true to apply a rewrite.");
+        }
+        if (request.approvedBy() == null || request.approvedBy().isBlank()) {
+            throw new BadResourceRequestException("approvedBy is required — the rewrite is recorded against this name.");
+        }
         FindingEntity finding = findingRepository.findById(request.findingId())
                 .orElseThrow(() -> new ResourceNotFoundException("Finding " + request.findingId() + " not found"));
         if (finding.getSuggestedRewrite() == null || finding.getSuggestedRewrite().isBlank()) {
