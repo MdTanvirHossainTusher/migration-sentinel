@@ -1,0 +1,101 @@
+spring:
+  application:
+    name: migration-sentinel
+  profiles:
+    active: ${PROFILE_ACTIVE:default}
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5440}/${DB_NAME:sentinel_db}
+    username: ${DB_USERNAME:sentinel}
+    password: ${DB_PASSWORD:sentinel}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:8}
+      minimum-idle: 1
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: sentinel
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: sentinel
+    default-schema: sentinel
+    create-schemas: true
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    mapper:
+      accept-case-insensitive-enums: true
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:9091}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    try-it-out-enabled: true
+
+app:
+  version: "@project.version@"
+
+sentinel:
+  cors-allowed-origins:
+    - ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
+  eval-corpus-path: classpath:eval/cases
+  large-table-row-threshold: ${SENTINEL_LARGE_TABLE_ROW_THRESHOLD:1000000}
+  rewrite-output-dir: ${SENTINEL_REWRITE_OUTPUT_DIR:./rewrites}
+  rewrite-apply-enabled: ${SENTINEL_REWRITE_APPLY_ENABLED:false}
+  llm:
+    provider: ${SENTINEL_LLM_PROVIDER:heuristic}
+    max-tool-iterations: ${SENTINEL_LLM_MAX_TOOL_ITERATIONS:12}
+    request-timeout: ${SENTINEL_LLM_REQUEST_TIMEOUT:90s}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      model: ${OPENAI_MODEL:gpt-4o-mini}
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+      model: ${GEMINI_MODEL:gemini-2.0-flash}
+  sandbox:
+    postgres-image: ${SENTINEL_SANDBOX_IMAGE:postgres:16-alpine}
+    migration-timeout: ${SENTINEL_SANDBOX_MIGRATION_TIMEOUT:60s}
+    statement-timeout: ${SENTINEL_SANDBOX_STATEMENT_TIMEOUT:45s}
+    reuse-within-evaluation: true
+
+logging:
+  level:
+    com.migrationsentinel: ${SENTINEL_LOG_LEVEL:INFO}
+    org.testcontainers: WARN
+    org.flywaydb: WARN
+    tc: WARN
