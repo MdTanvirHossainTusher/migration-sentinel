@@ -127,7 +127,7 @@ services:
       SENTINEL_JOB_POOL_SIZE: ${SENTINEL_JOB_POOL_SIZE:-2}
 
       # Per-request LLM key encryption. Dev value; override in .env for anything real.
-      SENTINEL_CRYPTO_SECRET: ${SENTINEL_CRYPTO_SECRET:-ZGV2LW9ubHktMzJieXRlLXNlbnRpbmVsLWtleS0xMjM0NTY=}
+      SENTINEL_CRYPTO_SECRET: "${SENTINEL_CRYPTO_SECRET:-ZGV2LW9ubHktc2VudGluZWwtY3J5cHRvLWtleS0zMmI=}"
 
       # Object storage → RustFS. Credentials come from .env (defaults match the rustfs service).
       SENTINEL_S3_ENABLED: "true"

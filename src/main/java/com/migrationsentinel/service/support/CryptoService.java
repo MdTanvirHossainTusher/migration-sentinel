@@ -8,6 +8,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 
@@ -35,11 +36,7 @@ public class CryptoService {
     public CryptoService(@Value("${sentinel.crypto.secret:}") String configuredSecret) {
         byte[] keyBytes;
         if (configuredSecret != null && !configuredSecret.isBlank()) {
-            keyBytes = Base64.getDecoder().decode(configuredSecret.trim());
-            if (keyBytes.length != 32) {
-                throw new IllegalStateException("sentinel.crypto.secret must decode to 32 bytes (got "
-                        + keyBytes.length + ")");
-            }
+            keyBytes = toKeyBytes(configuredSecret.trim());
         } else {
             keyBytes = new byte[32];
             new SecureRandom().nextBytes(keyBytes);
@@ -47,6 +44,26 @@ public class CryptoService {
                     + "will not survive a restart or work across replicas.");
         }
         this.key = new SecretKeySpec(keyBytes, "AES");
+    }
+
+    /**
+     * Prefer a base64-encoded 32-byte key; accept anything else by hashing it to 32 bytes,
+     * so a judge who sets {@code SENTINEL_CRYPTO_SECRET=whatever} still gets a working stack.
+     */
+    private static byte[] toKeyBytes(String secret) {
+        try {
+            byte[] decoded = Base64.getDecoder().decode(secret);
+            if (decoded.length == 32) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException notBase64) {
+            // fall through to the hash
+        }
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ex) {
+            throw new IllegalStateException("cannot derive a crypto key", ex);
+        }
     }
 
     /** Returns null for null/blank input. */
