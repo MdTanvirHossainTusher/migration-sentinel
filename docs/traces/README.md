@@ -9,6 +9,7 @@ plus the findings and the rendered report.
 | --- | --- | --- | --- |
 | `heuristic-not-null-large-table.json` | heuristic (offline) | `SET NOT NULL` on a table seeded to 5M rows | 1 HIGH finding, `CONFIRMED` |
 | `openai-luna-not-null-large-table.json` | openai `gpt-5.6-luna` | same input | 1 HIGH finding, `CONFIRMED` — analyzer also self-checks with `describe_table` + `estimate_rows` |
+| `evaluation-baseline-vs-openai.json` | heuristic vs openai `gpt-5.6-luna` | the whole 15-case corpus | baseline F1 0.81 → full agent F1 0.96, recall 0.85 → 1.00 (3 runs) |
 
 ## The two agents
 

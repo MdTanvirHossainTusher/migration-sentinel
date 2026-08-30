@@ -96,6 +96,30 @@ ANALYZER_VERIFIER_SPLIT       1.00   1.00   1.00       0.00     15/15
 
 Per-stage breakdown and the story of each jump: [CHANGELOG_IMPROVEMENT.md](CHANGELOG_IMPROVEMENT.md).
 
+### With a real model (`provider=openai`, `gpt-5.6-luna`)
+
+The heuristic numbers above are the deterministic, no-key baseline. Running the same corpus
+through `ANALYZER_VERIFIER_SPLIT` with a real LLM (three runs, paid key,
+[`docs/traces/evaluation-baseline-vs-openai.json`](traces/evaluation-baseline-vs-openai.json)):
+
+| Metric | Baseline (prompt only) | Full agent — `gpt-5.6-luna` | Change |
+| --- | --- | --- | --- |
+| Recall (defects caught) | 0.85 | **1.00** | +0.15 |
+| Precision | 0.79 | **0.93** | +0.14 |
+| F1 | 0.81 | **0.96** | +0.15 |
+| False positives / case | 0.20 | **0.07** | −0.13 |
+| Mean time / case | ~0 s | **~8.8 s** | +8.8 s |
+| Cases passed | 12 / 15 | **14 / 15** | +2 |
+
+Recall is **1.00** across all three runs — every seeded defect is caught. The single miss is
+case 04 (`SET NOT NULL` on an empty table): the model flagged it `LOW` where the label
+requires *clean*, so it scores as one false positive. The verifier keeps precision at 0.93
+by dropping the analyzer's un-grounded claims; a run without the verifier scored 0.87.
+
+The takeaway is the same as the heuristic curve: the tools do the measuring, so even a small
+current-gen model clears the bar. `provider=openai` needs a paid key — a free-tier rate
+limit fails the multi-call corpus.
+
 ### What this corpus does not measure
 
 Worth stating plainly, because it cost us a real defect. Every case supplies one small

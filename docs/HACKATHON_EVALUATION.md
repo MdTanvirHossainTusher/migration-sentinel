@@ -7,7 +7,7 @@ Migration Sentinel against the judging rubric. Every claim points at something i
 | Problem & User Value | 15 | [README](../README.md#who-has-this-problem) — a backend engineer whose migration is safe on a laptop and a four-minute outage on production, because the risk is in the data, not the SQL text |
 | Agent Solution & Engineering | 30 | analyzer/verifier split over real tools ([CHANGELOG stages 1–4](CHANGELOG_IMPROVEMENT.md)); disposable-sandbox tool layer ([SAFETY_MODEL](SAFETY_MODEL.md)); [ARCHITECTURE](ARCHITECTURE.md) — outbox→Kafka queue, AFTER_COMMIT dispatch, audit trail, secret redaction, encrypted per-request keys |
 | End to End Quality | 20 | one `docker compose up`; downloadable `report.md`; the report format in the README; the UI walks load → size → run → verdict; nothing reads as an AI draft |
-| Measured Improvement | 15 | [EVALUATION](EVALUATION.md) + [CHANGELOG_IMPROVEMENT](CHANGELOG_IMPROVEMENT.md); `./gradlew evaluationTest` reproduces the table and asserts every delta |
+| Measured Improvement | 15 | [EVALUATION](EVALUATION.md) — baseline F1 0.81 → full agent F1 0.96 (`gpt-5.6-luna`, recall 1.00) / 1.00 (deterministic heuristic); `./gradlew evaluationTest` reproduces the heuristic table and asserts every delta; real-model runs in [traces/evaluation-baseline-vs-openai.json](traces/evaluation-baseline-vs-openai.json) |
 | Reproducibility | 15 | [REPRODUCTION_GUIDE](REPRODUCTION_GUIDE.md); self-contained compose (Kafka + RustFS + dind bundled, no external infra); offline `heuristic` brain needs no key |
 | Hot Take / Insights | 5 | [HOT_TAKE](HOT_TAKE.md) — plus the stage-6 lesson: the reproducibility score is decided by the second person's first run |
 

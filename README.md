@@ -80,9 +80,17 @@ cannot tell case 03 (`SET NOT NULL` on a 5M-row table — an outage) apart from 
 (the **identical SQL** on an empty table — instant and safe). It either flags both (false
 positive, alert fatigue) or neither (missed outage).
 
-The agent measures the table and gets both right. Full numbers in
-[docs/EVALUATION.md](docs/EVALUATION.md); the story of how each iteration moved the numbers
-is in [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
+The agent measures the table and gets both right. On the 15-case corpus:
+
+| Metric | Baseline (one prompt) | Full agent | |
+| --- | --- | --- | --- |
+| Recall (defects caught) | 0.85 | **1.00** | offline heuristic *and* `gpt-5.6-luna` |
+| F1 | 0.81 | **0.96–1.00** | 1.00 heuristic · 0.96 with a real model |
+| False positives / case | 0.20 | **0.00–0.07** | |
+
+Deterministic heuristic run: `./gradlew evaluationTest`. Real-model runs and per-case detail:
+[docs/EVALUATION.md](docs/EVALUATION.md) · [docs/traces/](docs/traces/). The story of how each
+iteration moved the numbers: [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
 
 ## Quick start
 
