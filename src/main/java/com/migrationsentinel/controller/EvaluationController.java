@@ -4,6 +4,7 @@ import com.migrationsentinel.payload.common.ApiResponse;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.ResponseBuilder;
 import com.migrationsentinel.payload.request.RunEvaluationRequest;
+import com.migrationsentinel.payload.response.EvaluationCaseSummary;
 import com.migrationsentinel.payload.response.EvaluationDetailResponse;
 import com.migrationsentinel.payload.response.EvaluationRunResponse;
 import com.migrationsentinel.service.eval.EvaluationCase;
@@ -22,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import static com.migrationsentinel.constant.code.SuccessCodes.EVALUATION_ACCEPTED;
@@ -59,24 +59,24 @@ public class EvaluationController {
 
     @GetMapping("/cases")
     @Operation(summary = "The evaluation corpus: id, title, expected findings, whether it is a hard case")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> cases() {
-        List<Map<String, Object>> cases = evaluationService.cases().stream()
+    public ResponseEntity<ApiResponse<List<EvaluationCaseSummary>>> cases() {
+        List<EvaluationCaseSummary> cases = evaluationService.cases().stream()
                 .map(this::summarize)
                 .toList();
         return ResponseBuilder.ok(cases);
     }
 
-    private Map<String, Object> summarize(EvaluationCase c) {
-        return Map.of(
-                "id", c.id(),
-                "title", c.title(),
-                "description", c.description(),
-                "hard", c.hard(),
-                "mustBeClean", c.mustBeClean(),
-                "expected", c.expected().stream()
-                        .map(e -> Map.of(
-                                "ruleCode", e.ruleCode().name(),
-                                "targetObject", e.targetObject() == null ? "" : e.targetObject()))
+    private EvaluationCaseSummary summarize(EvaluationCase c) {
+        return new EvaluationCaseSummary(
+                c.id(),
+                c.title(),
+                c.description(),
+                c.hard(),
+                c.mustBeClean(),
+                c.expected().stream()
+                        .map(e -> new EvaluationCaseSummary.Expected(
+                                e.ruleCode().name(),
+                                e.targetObject() == null ? "" : e.targetObject()))
                         .toList());
     }
 }

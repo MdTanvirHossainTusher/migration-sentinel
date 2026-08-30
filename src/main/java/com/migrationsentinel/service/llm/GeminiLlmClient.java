@@ -107,7 +107,7 @@ public class GeminiLlmClient implements LlmClient {
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                     .build();
 
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = LlmHttp.sendWithBackoff(http, request, "Gemini");
             if (response.statusCode() / 100 != 2) {
                 throw new LlmProviderException(providerError("Gemini", response.statusCode(), response.body()));
             }
