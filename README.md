@@ -202,6 +202,83 @@ The agent runs DDL. It never touches a real database:
 
 Details: [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md) · system design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Platform, patterns & tools
+
+The agent is the point; the platform around it is built so a team could actually run it.
+Everything below is off by default — `sentinel.messaging.transport=local` and
+`sentinel.s3.enabled=false` keep `./gradlew test` and `bootRun` free of Kafka and S3 —
+`docker compose up` turns it all on.
+
+### Messaging & job dispatch
+
+- **Transactional outbox** — `outbox_event` (`V3`). A submission writes the job row *and* the
+  outbox row in one transaction; they commit or roll back together.
+- **Kafka transport** — `OutboxPublishService` relays rows to `migration-sentinel.reviews` /
+  `.evaluations` / `.audit`; `JobConsumer` (`@KafkaListener`, consumer group, concurrency 2)
+  executes them. All Kafka beans are hand-built in `config/KafkaConfig`; Boot's
+  `KafkaAutoConfiguration` is excluded so `local` mode has zero broker code.
+- **Hybrid relay** — an `@TransactionalEventListener(AFTER_COMMIT)` immediate publish for
+  latency **plus** a `@Scheduled(fixedDelay = 5s)` sweep as the recovery net (broker down,
+  pod crash). `GET /actuator/scheduledtasks` shows the sweep registered.
+- **`SELECT … FOR UPDATE SKIP LOCKED`** lease so parallel relay pods take disjoint slices.
+- **After-commit dispatch** everywhere — the executor never starts before the submitting
+  transaction is durable (this fixed a race where evaluations stuck `QUEUED`).
+- **Idempotent consumers** — runners no-op on an already-terminal job (at-least-once).
+
+### Audit
+
+- `audit_event` (`V4`), browsable at `GET /api/v1/audit-events`.
+- **Declarative** — `@Audited(action, aggregateType, id)` + `AuditAspect` (`@Around`,
+  `@Order(100)`), pinned *inside* the `@Transactional` advice by
+  `@EnableTransactionManagement(order = 0)` so the event joins the business transaction.
+  On `review.submitted`, `evaluation.submitted`, `rewrite.applied`, `artifact.confirmed`.
+- **Explicit** for async terminal states — `review.completed` / `.failed`,
+  `evaluation.completed` / `.failed` — recorded by the runner on the worker thread.
+- Under Kafka, also relayed on `migration-sentinel.audit`.
+
+### Secrets & redaction
+
+- `SecretMasker` + a masking Logback appender strip anything credential-shaped (`sk-…`,
+  `AIza…`, bearer tokens, `key=value` secrets, JDBC passwords; extra patterns from
+  `redaction.xml`) from the console, audit payloads and persisted trajectories.
+- A **per-request LLM API key** is AES-GCM encrypted at rest (`CryptoService`), decrypted
+  only by the worker, never in a response, log or audit payload.
+
+### Object storage
+
+- Presigned upload / download against **RustFS** (any S3 API) via AWS SDK for Java v2 — two
+  endpoints (internal for the service, public for the URLs it signs). `report.md` is stored
+  server-side on completion and handed out as a short-lived presigned URL; the backend never
+  proxies file bytes. `POST /artifacts/uploads` → `/confirm` for user uploads, with a
+  configurable size cap.
+
+### Tools
+
+| Area | Used |
+| --- | --- |
+| Runtime | Java 21 · Spring Boot 3.4 · Gradle |
+| Persistence | PostgreSQL · Flyway · JPA/Hibernate |
+| Sandbox | Testcontainers Postgres, against a bundled `docker:dind` engine in compose |
+| Messaging | Apache Kafka 4 (KRaft) · Spring for Apache Kafka |
+| Object storage | RustFS · `software.amazon.awssdk:s3` (client + presigner) |
+| AOP | `spring-boot-starter-aop` (AspectJ) for `@Audited` |
+| Crypto | JDK `javax.crypto` AES-GCM |
+| API | Spring MVC · `ApiResponse<T>` envelope · springdoc/Swagger · actuator + Prometheus |
+| Frontend | Next.js 15 |
+| LLM | offline `heuristic` · OpenAI (`gpt-5.6-luna`) · Gemini (`gemini-flash-latest`) — raw HTTP, no SDK, with 429/503 backoff |
+| CI/CD | GitHub Actions (unit / sandbox / evaluation / frontend) · Release Please |
+
+### Patterns
+
+Transactional outbox · hybrid relay (immediate + scheduled sweep) · `SKIP LOCKED` work-queue
+lease · after-commit event dispatch · strategy (`JobSubmissionGateway`, `LlmClient`) · AOP
+interception ordered inside the tx advisor · decorator (`MaskingLoggingEventWrapper`) ·
+analyzer/verifier multi-agent split with an explicit agent loop · idempotent at-least-once
+consumers · feature-flagged conditional beans · unified response envelope + global exception
+handler · presigned direct-to-storage · retry-with-backoff honouring provider rate-limit hints.
+
+Full request flow and where it scales: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Prior work
 
 | Component | Origin |
