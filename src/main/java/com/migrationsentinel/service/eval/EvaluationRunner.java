@@ -71,6 +71,7 @@ public class EvaluationRunner {
                     job.setStatus(ReviewStatus.QUEUED);
                     job.setMode(run.getMode());
                     job.setLlmProvider(run.getLlmProvider());
+                    job.setLlmApiKeyEncrypted(run.getLlmApiKeyEncrypted());
                     job.setCaseId(testCase.id());
                     job.setMigrationFilename(testCase.id() + "/migration.sql");
                     job.setMigrationSql(testCase.migrationSql());

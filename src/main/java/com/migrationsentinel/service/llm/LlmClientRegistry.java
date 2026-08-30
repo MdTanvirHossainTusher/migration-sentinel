@@ -19,14 +19,25 @@ public class LlmClientRegistry {
 
     /** Resolve by explicit name, falling back to the configured default, then to heuristic. */
     public LlmClient resolve(String requested) {
+        return resolve(requested, null);
+    }
+
+    /**
+     * Resolve a client, optionally binding a per-request API key. With a key present the
+     * client is usable even when nothing is configured on the server — that is the whole
+     * point of the field.
+     */
+    public LlmClient resolve(String requested, String apiKey) {
         String name = requested != null && !requested.isBlank() ? requested : properties.getProvider();
-        LlmClient client = clients.stream()
+        LlmClient base = clients.stream()
                 .filter(c -> c.provider().equalsIgnoreCase(name))
                 .findFirst()
                 .orElseThrow(() -> new LlmProviderException("Unknown LLM provider: " + name));
+
+        LlmClient client = apiKey != null && !apiKey.isBlank() ? base.withApiKey(apiKey) : base;
         if (!client.available()) {
             throw new LlmProviderException("LLM provider '" + name + "' is selected but not configured "
-                    + "(missing API key). Use provider=heuristic to run offline.");
+                    + "(no API key on the server or the request). Use provider=heuristic to run offline.");
         }
         return client;
     }

@@ -12,6 +12,7 @@ export default function EvaluationsPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [mode, setMode] = useState<ReviewMode>("ANALYZER_VERIFIER_SPLIT");
   const [provider, setProvider] = useState("heuristic");
+  const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
 
   const refresh = () => api.listEvaluations().then(setRuns).catch(() => {});
@@ -27,7 +28,12 @@ export default function EvaluationsPage() {
   const run = async () => {
     setBusy(true);
     try {
-      await api.runEvaluation({ mode, provider, corpusLabel: `ui-${Date.now()}` });
+      await api.runEvaluation({
+        mode,
+        provider,
+        corpusLabel: `ui-${Date.now()}`,
+        llmApiKey: provider === "heuristic" ? undefined : apiKey.trim() || undefined,
+      });
       refresh();
     } finally {
       setBusy(false);
@@ -63,9 +69,8 @@ export default function EvaluationsPage() {
             <label>Provider</label>
             <select value={provider} onChange={(e) => setProvider(e.target.value)}>
               <option value="heuristic">heuristic (offline)</option>
-              {(health?.available_providers || []).filter((p) => p !== "heuristic").map((p) => (
-                <option key={p}>{p}</option>
-              ))}
+              <option value="openai">openai</option>
+              <option value="gemini">gemini</option>
             </select>
           </div>
           <div style={{ display: "flex", alignItems: "flex-end" }}>
@@ -74,6 +79,25 @@ export default function EvaluationsPage() {
             </button>
           </div>
         </div>
+        {provider !== "heuristic" && (
+          <div style={{ marginTop: 10 }}>
+            <label>API key for this run</label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                (health?.available_providers || []).includes(provider)
+                  ? "leave blank to use the server's key"
+                  : `your ${provider} API key`
+              }
+            />
+            <p className="muted">
+              Used for this run only, encrypted at rest, never returned or logged. Not stored in your browser.
+            </p>
+          </div>
+        )}
       </div>
 
       {baseline && agent && (

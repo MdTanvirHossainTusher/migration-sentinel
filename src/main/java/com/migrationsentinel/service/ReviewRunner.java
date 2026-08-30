@@ -14,6 +14,7 @@ import com.migrationsentinel.service.agent.MigrationReviewOrchestrator;
 import com.migrationsentinel.service.agent.RecordedToolCall;
 import com.migrationsentinel.service.agent.TrajectoryRecorder;
 import com.migrationsentinel.service.audit.AuditService;
+import com.migrationsentinel.service.support.CryptoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class ReviewRunner {
     private final ToolCallRepository toolCallRepository;
     private final MigrationReviewOrchestrator orchestrator;
     private final AuditService auditService;
+    private final CryptoService cryptoService;
 
     /**
      * Executes one review to completion. Invoked on a worker thread (the local dispatcher's
@@ -66,7 +68,8 @@ public class ReviewRunner {
         MigrationInput input = new MigrationInput(
                 job.getMigrationFilename(), job.getMigrationSql(), job.getBaselineSql(),
                 MigrationHistory.split(job.getBaselineSql()), job.getTargetSchema(),
-                job.getSeedSql(), job.getEntitySource(), job.getMode(), job.getLlmProvider(), job.getCaseId());
+                job.getSeedSql(), job.getEntitySource(), job.getMode(), job.getLlmProvider(), job.getCaseId(),
+                cryptoService.decrypt(job.getLlmApiKeyEncrypted()));
 
         TrajectoryRecorder recorder = new TrajectoryRecorder();
         long start = System.currentTimeMillis();

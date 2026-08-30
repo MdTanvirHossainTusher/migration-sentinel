@@ -18,7 +18,11 @@ public record RunEvaluationRequest(
         List<String> caseIds,
 
         @Schema(description = "Free-text label stored on the run", example = "baseline-vs-agent-2026-08-29")
-        String corpusLabel
+        String corpusLabel,
+
+        @Schema(description = "Optional: your own API key for this run, used instead of any server-configured "
+                + "key. Encrypted at rest, never returned, stripped from logs.")
+        String llmApiKey
 ) {
     public ReviewMode modeOrDefault() {
         return mode == null ? ReviewMode.ANALYZER_VERIFIER_SPLIT : mode;

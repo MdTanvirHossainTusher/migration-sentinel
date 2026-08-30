@@ -23,12 +23,14 @@ public record MigrationInput(
         String entitySource,
         ReviewMode mode,
         String provider,
-        String caseId
+        String caseId,
+        /** Decrypted per-request API key, or null. Never persisted from here, never logged. */
+        String llmApiKey
 ) {
     /** Convenience for evaluation cases and tests, which carry a flattened baseline only. */
     public MigrationInput(String filename, String migrationSql, String baselineSql, String seedSql,
                           String entitySource, ReviewMode mode, String provider, String caseId) {
-        this(filename, migrationSql, baselineSql, List.of(), null, seedSql, entitySource, mode, provider, caseId);
+        this(filename, migrationSql, baselineSql, List.of(), null, seedSql, entitySource, mode, provider, caseId, null);
     }
 
     public boolean hasBaseline() {

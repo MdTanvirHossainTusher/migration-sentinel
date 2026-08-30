@@ -83,7 +83,7 @@ class EvaluationHarnessTest {
 
     private EvaluationRunResponse runToCompletion(ReviewMode mode) {
         EvaluationRunResponse started = evaluationService.submit(new RunEvaluationRequest(
-                mode, "heuristic", List.of(), "harness-" + mode + "-" + Instant.now().toEpochMilli()));
+                mode, "heuristic", List.of(), "harness-" + mode + "-" + Instant.now().toEpochMilli(), null));
         await().atMost(Duration.ofMinutes(15)).pollInterval(Duration.ofSeconds(3)).until(() -> {
             EvaluationStatus s = evaluationService.get(started.id()).run().status();
             return s == EvaluationStatus.COMPLETED || s == EvaluationStatus.FAILED;

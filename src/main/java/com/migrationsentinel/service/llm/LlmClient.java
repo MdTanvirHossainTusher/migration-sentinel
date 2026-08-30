@@ -13,4 +13,12 @@ public interface LlmClient {
     boolean available();
 
     LlmResponse chat(List<LlmMessage> messages, List<ToolSpec> tools);
+
+    /**
+     * Return a view of this client that uses {@code apiKey} instead of any server-configured
+     * one, for a single review or evaluation. The default (heuristic) ignores it.
+     */
+    default LlmClient withApiKey(String apiKey) {
+        return this;
+    }
 }

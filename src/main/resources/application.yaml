@@ -101,6 +101,10 @@ sentinel:
   large-table-row-threshold: ${SENTINEL_LARGE_TABLE_ROW_THRESHOLD:1000000}
   rewrite-output-dir: ${SENTINEL_REWRITE_OUTPUT_DIR:./rewrites}
   rewrite-apply-enabled: ${SENTINEL_REWRITE_APPLY_ENABLED:false}
+  crypto:
+    # base64 of 32 bytes. Unset -> ephemeral key (single-process bootRun only). The compose
+    # stack sets a fixed dev value; a real deployment injects a secret.
+    secret: ${SENTINEL_CRYPTO_SECRET:}
   llm:
     provider: ${SENTINEL_LLM_PROVIDER:heuristic}
     max-tool-iterations: ${SENTINEL_LLM_MAX_TOOL_ITERATIONS:12}

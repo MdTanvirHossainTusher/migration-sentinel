@@ -11,6 +11,7 @@ import com.migrationsentinel.model.enums.ReviewStatus;
 import com.migrationsentinel.mapper.DtoMapper;
 import com.migrationsentinel.messaging.JobSubmissionGateway;
 import com.migrationsentinel.service.audit.AuditService;
+import com.migrationsentinel.service.support.CryptoService;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.Pagination;
 import com.migrationsentinel.payload.dto.MigrationFile;
@@ -38,6 +39,7 @@ public class ReviewService {
     private final ToolCallRepository toolCallRepository;
     private final JobSubmissionGateway jobGateway;
     private final AuditService auditService;
+    private final CryptoService cryptoService;
     private final DtoMapper mapper;
     private final ObjectMapper objectMapper;
 
@@ -68,6 +70,7 @@ public class ReviewService {
         job.setSeedSql(blankToNull(request.seedSql()));
         job.setEntitySource(blankToNull(request.entitySource()));
         job.setLlmProvider(request.provider() == null || request.provider().isBlank() ? "heuristic" : request.provider());
+        job.setLlmApiKeyEncrypted(cryptoService.encrypt(request.llmApiKey()));
         job = reviewJobRepository.saveAndFlush(job);
 
         auditService.record("review.submitted", "review", job.getId().toString(), "api",
