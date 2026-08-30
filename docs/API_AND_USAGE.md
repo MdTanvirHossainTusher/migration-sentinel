@@ -10,6 +10,19 @@ what to expect back.
 - **OpenAPI JSON:** `http://localhost:8080/v3/api-docs`
 - **Actuator (separate port):** `http://localhost:9091/actuator/health`, `/actuator/prometheus`
 
+### Endpoint map
+
+| Method + path | Purpose |
+| --- | --- |
+| `POST /api/v1/reviews` | submit a migration (optional `llm_api_key` for a per-request model key) |
+| `GET /api/v1/reviews/{id}` · `/report` · `/report.md` | status · full report · downloadable `report.md` (302 to a presigned URL when S3 is on) |
+| `GET /api/v1/reviews/{id}/approvals` | apply-rewrite trail |
+| `POST /api/v1/reviews/rewrites/apply` | human-gated write of a rewrite to disk |
+| `POST /api/v1/evaluations` · `GET /api/v1/evaluations/{id}` · `/cases` | run / read / list the corpus (also takes `llm_api_key`) |
+| `GET /api/v1/audit-events` | the durable audit trail, newest first |
+| `POST /api/v1/artifacts/uploads` · `/uploads/{id}/confirm` · `GET /artifacts/{id}` | presigned upload → confirm → download (needs `sentinel.s3.enabled=true`) |
+| `GET /api/v1/health` | providers, sandbox status, corpus size |
+
 ---
 
 ## 1. Running the project
@@ -184,6 +197,10 @@ Omit `mode` to get `ANALYZER_VERIFIER_SPLIT`.
 | `entitySource` | string | no | JPA entity Java source or a JSON mapping spec — enables the drift check |
 | `mode` | enum | no | one of the `ReviewMode` values above (default `ANALYZER_VERIFIER_SPLIT`) |
 | `provider` | string | no | `heuristic` (default), `openai`, `gemini` |
+| `llm_api_key` | string | no | a key for `openai`/`gemini` used for this one review; encrypted at rest, never returned, stripped from logs and audit. Omit to use the server's key. |
+
+Wire format is **snake_case** (`migration_sql`, `baseline_migrations`, `target_schema`, …);
+unknown keys are ignored, so a camelCase typo submits as null.
 
 **curl**
 
@@ -562,6 +579,50 @@ Expected (offline heuristic brain, deterministic — also produced by
 | `ANALYZER_WITH_SANDBOX` | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | `ANALYZER_VERIFIED` | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | `ANALYZER_VERIFIER_SPLIT` | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
+
+---
+
+## 4a. Audit trail
+
+Every consequential action is recorded in `audit_event`, in the same transaction as the
+change. Under the `kafka` transport it is also relayed on `migration-sentinel.audit`.
+
+```bash
+curl -s "http://localhost:8080/api/v1/audit-events?size=20" | jq '.data[] | {event_type, summary, actor, created_at}'
+# scope to one aggregate:
+curl -s "http://localhost:8080/api/v1/audit-events?aggregate_type=review&aggregate_id=$ID" | jq '.data'
+```
+
+Event types: `review.submitted`, `review.completed`, `review.failed`,
+`evaluation.completed`, `evaluation.failed`, `rewrite.applied`, `artifact.confirmed`. A
+per-request API key passed on the original request is **not** present in any payload — it is
+run through the secret masker before the row is written.
+
+## 4b. Artifacts (presigned upload / download)
+
+Needs `sentinel.s3.enabled=true` (the compose stack sets it; off for `bootRun`). The report
+is stored as `report.md` on completion and handed out as a presigned URL:
+
+```bash
+# download report.md — 302 to a short-lived presigned URL when S3 is on, inline text otherwise
+curl -sL http://localhost:8080/api/v1/reviews/$ID/report.md -o report.md
+```
+
+Uploading a file (e.g. a zipped migration folder) is a three-step presigned flow — the
+server never receives the bytes:
+
+```bash
+# 1. ask for a URL (size is checked against sentinel.s3.max-file-size)
+UP=$(curl -s -XPOST http://localhost:8080/api/v1/artifacts/uploads -H 'content-type: application/json' \
+  -d '{"filename":"migrations.zip","content_type":"application/zip","size_bytes":40000}')
+URL=$(echo "$UP" | jq -r '.data.uploadUrl'); AID=$(echo "$UP" | jq -r '.data.artifactId')
+
+# 2. PUT the bytes straight to object storage
+curl -s -XPUT "$URL" --data-binary @migrations.zip -H 'content-type: application/zip'
+
+# 3. confirm — the server HEADs the object, re-checks the size, registers it
+curl -s -XPOST "http://localhost:8080/api/v1/artifacts/uploads/$AID/confirm" | jq '.data'
+```
 
 ---
 

@@ -24,11 +24,31 @@ Agentic reviewer for Flyway migrations. `com.migrationsentinel`.
 | `controller/` | REST endpoints, `ApiResponse<T>` envelope via `ResponseBuilder` |
 | `service/agent/` | `AgentLoop`, `Toolbox`, `MigrationReviewOrchestrator`, `PromptLibrary` (prompts in `resources/prompts/`) |
 | `service/sandbox/` | Testcontainers lifecycle, introspection, migration replay, lock analysis, JPA validate |
-| `service/llm/` | `LlmClient` + heuristic / openai / gemini implementations, `LlmClientRegistry` |
+| `service/llm/` | `LlmClient` + heuristic / openai / gemini implementations, `LlmClientRegistry` (`resolve(provider, apiKey)`) |
 | `service/rules/` | `DdlParser`, `RuleCatalog`, `StaticRuleScanner` (deterministic) |
 | `service/eval/` | corpus loader, scorer, evaluation runner |
+| `service/audit/` | `AuditService` — audit_event row + optional Kafka relay, same transaction |
+| `service/artifact/` | `ArtifactStorageService` — presigned S3 upload/confirm, server-side report storage |
+| `service/support/` | `AgentJsonMapper` (camelCase), `CryptoService` (AES-GCM for per-request keys) |
+| `messaging/` | `JobSubmissionGateway` — `local/` (AFTER_COMMIT event) and `outbox/` (outbox→Kafka) transports; `JobExecutionService` is the shared execution entry point |
+| `util/` | `SecretMasker` + `MaskingConsoleAppender` (redaction) |
 | `model/entity/` | JPA entities; `model/enums/` domain enums |
 | `payload/` | `request/`, `response/`, `common/`, `dto/` |
+
+### Stage-6 conventions
+
+- **Job dispatch is always AFTER_COMMIT.** `submit()` is `@Transactional` and calls
+  `JobSubmissionGateway`; never call a runner directly from a submit path. `local` transport
+  = `@TransactionalEventListener(AFTER_COMMIT)` + `@Async("jobExecutor")`; `kafka` =
+  `OutboxRecorder` → `OutboxRelay` → `JobConsumer`. Runners no-op on a terminal job.
+- **Kafka is opt-in.** `KafkaAutoConfiguration` is excluded in `application.yaml`; all Kafka
+  beans live in `config/KafkaConfig` gated on `sentinel.messaging.transport=kafka`. Tests,
+  `bootRun` and the eval harness run `local`.
+- **S3 is opt-in.** `sentinel.s3.enabled=false` by default → report stays inline; every S3
+  bean and `ArtifactStorageService` is `@ConditionalOnProperty`. Inject via `ObjectProvider`.
+- **Secrets never travel in the clear.** Per-request keys are `CryptoService`-encrypted on
+  the row; `SecretMasker.mask(...)` is applied in `TrajectoryRecorder`, `AuditService` and
+  `OutboxRecorder`; `DtoMapper` never maps `llmApiKeyEncrypted`.
 
 ## Conventions
 

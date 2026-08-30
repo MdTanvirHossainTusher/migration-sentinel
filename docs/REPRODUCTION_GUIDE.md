@@ -6,7 +6,7 @@ Written for someone on a clean machine.
 
 | Tool | Version | Why |
 | --- | --- | --- |
-| Docker | 24+ with a running daemon | The sandbox is a Testcontainers Postgres; `docker compose` runs the stack |
+| Docker | 24+ with a running daemon | `docker compose` runs the whole stack — app, Postgres, Kafka, RustFS, and a Docker-in-Docker engine for the sandbox |
 | JDK | 21 (Temurin) | Backend build/run. The Gradle wrapper is included |
 | Node | 20+ | Only if you run the frontend outside Docker |
 | Git | any | Clone the repo |
@@ -30,8 +30,11 @@ docker compose up --build
 - API + Swagger: <http://localhost:8080/swagger-ui.html>
 - Health (shows Docker/sandbox status): <http://localhost:8080/api/v1/health>
 
-First build ≈ 3–5 min. The backend container mounts the host Docker socket so the sandbox
-containers it starts are siblings on the host.
+First build ≈ 3–5 min. The stack is self-contained: it brings up a `docker:dind` engine for
+the Testcontainers sandbox (so `sandbox_used` is true with no host-socket fiddling), a
+single-node Kafka for the job queue (`sentinel.messaging.transport=kafka`), and RustFS for
+the downloadable `report.md` (`sentinel.s3.enabled=true`). Nothing external is required.
+The first review is slower — the sandbox pulls `postgres:16-alpine` inside the dind engine.
 
 **Try it:** open the frontend → **Load example** → **Run review**. You'll get a report with
 a `DESTRUCTIVE_DDL` finding (the dropped column), an `UNINDEXED_FOREIGN_KEY`, a
@@ -143,13 +146,24 @@ and how far it got, and marks the review ungrounded rather than reporting it cle
 
 ## With a real LLM (optional)
 
+Two ways to supply a key:
+
+**Per request (no server config).** Pick `openai` or `gemini` in the UI and paste a key into
+the field that appears — it is used for that one review, AES-GCM encrypted at rest, never
+returned by the API, and stripped from logs and the audit trail. Or via the API:
+
 ```bash
-export OPENAI_API_KEY=sk-...            # or GEMINI_API_KEY
-SENTINEL_LLM_PROVIDER=openai docker compose up --build
+curl -s -XPOST localhost:8080/api/v1/reviews -H 'content-type: application/json' -d '{
+  "migration_sql": "ALTER TABLE orders ALTER COLUMN status SET NOT NULL;",
+  "mode": "ANALYZER_VERIFIER_SPLIT", "provider": "openai", "llm_api_key": "sk-..."
+}'
 ```
 
-Then pick `openai` as the provider in the UI, or pass `"provider":"openai"` in the API
-call. Cost: ≈ $0.01–0.03 per review on `gpt-4o-mini`, ≈ $0.20 for the full evaluation.
+**On the server.** Put the key in `.env` (`OPENAI_API_KEY=` / `GEMINI_API_KEY=`) before
+`docker compose up`. The provider dropdown then shows it as "key on server".
+
+Cost: ≈ $0.01–0.03 per review on `gpt-4o-mini`, ≈ $0.20 for the full evaluation. Full
+walkthrough for a real service's folder: [TEST_WITH_IDENTITY_MIGRATIONS.md](TEST_WITH_IDENTITY_MIGRATIONS.md).
 
 ## Data
 
@@ -160,8 +174,10 @@ All synthetic. The 15 cases build their own schemas and seed their own rows; the
 
 | Symptom | Fix |
 | --- | --- |
-| `health` shows `dockerAvailable: false` | Start Docker. Structure-only review still works; sandbox stages don't |
-| `SANDBOX_UNAVAILABLE` on a review | Same — the Docker daemon isn't reachable from the backend |
+| `health` shows `docker_available: false` in **compose** | The `dind` service is still starting — `docker compose logs dind`; the backend waits on its healthcheck, so this clears on its own |
+| `health` shows `docker_available: false` in **`bootRun` on Windows** | Expected — a host `bootRun` hits the Docker Desktop 29 socket-proxy incompatibility. Use `docker compose up` (bundled dind) for the grounded sandbox |
+| Reviews stay `QUEUED` in compose | `docker compose logs kafka` — the broker is still forming its quorum; the backend healthcheck gates on it, so this is transient |
 | Backend can't reach Postgres in Compose | `docker compose down -v` then `up` again |
-| Sandbox container image pull is slow | `docker pull postgres:16-alpine` once beforehand |
-| `./gradlew sandboxTest` → `Could not find a valid Docker environment` on **Windows + Docker Desktop 29** | docker-java (bundled in Testcontainers) can't negotiate the API version with Docker Desktop 29's socket proxy. CI (`ubuntu-latest`) is unaffected. Locally, run the tests against a real Docker-in-Docker engine: `docker run -d --privileged --name dind --network <net> -e DOCKER_TLS_CERTDIR= docker:28-dind --host=tcp://0.0.0.0:2375`, then run gradle in a `eclipse-temurin:21-jdk` container on the same network with `DOCKER_HOST=tcp://dind:2375` and `TESTCONTAINERS_HOST_OVERRIDE=dind`. `docker compose up` also works unchanged. |
+| Sandbox container image pull is slow | `docker compose exec dind docker pull postgres:16-alpine` once beforehand |
+| `report.md` download 404s | `sentinel.s3.enabled` is off (the default outside compose) — the report is then inline at `GET /reviews/{id}/report` instead |
+| `./gradlew sandboxTest` → `Could not find a valid Docker environment` on **Windows + Docker Desktop 29** | docker-java (bundled in Testcontainers) can't negotiate the API version with Docker Desktop 29's socket proxy. CI (`ubuntu-latest`) is unaffected. Locally, run the tests against a real Docker-in-Docker engine: `docker run -d --privileged --name dind -e DOCKER_TLS_CERTDIR= docker:27-dind --host=tcp://0.0.0.0:2375`, then run gradle with `DOCKER_HOST=tcp://dind:2375` and `TESTCONTAINERS_HOST_OVERRIDE=dind`. `docker compose up` already does this for you. |

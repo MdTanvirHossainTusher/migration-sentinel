@@ -61,7 +61,23 @@ The one path that writes to disk is the **"Apply to file"** button, and it:
 4. records an [`ApprovalRecord`](../src/main/java/com/migrationsentinel/model/entity/ApprovalRecordEntity.java)
    row — who, when, which finding, which file — for every write.
 
-`GET /api/v1/reviews/{id}/approvals` is the audit trail.
+`GET /api/v1/reviews/{id}/approvals` is the per-review apply trail.
+
+## 4a. Everything consequential is audited, and secrets are redacted
+
+- **`audit_event`** — `review.submitted` / `.completed` / `.failed`, `evaluation.completed`,
+  `rewrite.applied`, `artifact.confirmed` are each written in the same transaction as the
+  change, and (under the kafka transport) relayed on `migration-sentinel.audit`. Browse it
+  at `GET /api/v1/audit-events`.
+- **A per-request LLM API key** is AES-GCM encrypted
+  ([`CryptoService`](../src/main/java/com/migrationsentinel/service/support/CryptoService.java))
+  before it is stored on the job row, decrypted only by the worker immediately before the
+  LLM call, and never mapped into any API response.
+- **`SecretMasker`** + a masking log appender strip anything credential-shaped (`sk-…`,
+  `AIza…`, bearer tokens, `key=value` secrets, JDBC passwords) from the console, the audit
+  payloads and the persisted agent trajectories. Patterns extend from `redaction.xml`.
+- **Object storage** never receives a credential: uploads are presigned PUT URLs, the
+  `report.md` is stored server-side, and downloads are short-lived presigned GET URLs.
 
 ## 5. The human is the reviewer
 

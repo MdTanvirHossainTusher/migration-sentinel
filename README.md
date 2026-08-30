@@ -91,8 +91,14 @@ is in [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
 docker compose up --build
 ```
 
+The stack is self-contained — it bundles a Docker-in-Docker engine for the sandbox, a
+single-node Kafka for the job queue, and RustFS for the downloadable `report.md`. Nothing
+external is required.
+
 Then open <http://localhost:3000> and drop your `src/main/resources/db/migration` folder on
-the page — or click **Load example** to see the whole flow first.
+the page — or click **Load example** to see the whole flow first. Reviewing a real service's
+folder (schemas, extensions, a per-request model key):
+[docs/TEST_WITH_IDENTITY_MIGRATIONS.md](docs/TEST_WITH_IDENTITY_MIGRATIONS.md).
 
 Run the whole evaluation from the CLI:
 
@@ -136,21 +142,29 @@ The agent runs DDL. It never touches a real database:
 - Suggested rewrites are **text in the report**. The only path that writes to disk is the
   "Apply to file" button, which requires an explicit human click, records who approved it,
   writes only into a configured output directory, and is disabled by default.
+- Every consequential action is written to an `audit_event` trail in the same transaction.
+  A per-request model key is AES-GCM encrypted at rest and never returned or logged; a
+  masking log appender redacts anything credential-shaped from the console, the audit
+  payloads and the persisted trajectories.
 
-Details: [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md).
+Details: [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md) · system design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Prior work
 
 | Component | Origin |
 | --- | --- |
 | PostgreSQL, Flyway, Hibernate/JPA, Testcontainers, Spring Boot, Next.js | Existing open source, used as-is |
+| Apache Kafka, Spring for Apache Kafka, AWS SDK for Java v2, RustFS | Existing open source, used as-is |
 | Demo schemas + seed generators in the 15 evaluation cases | Built for this hackathon |
 | Agent tool layer, agent loop, analyzer/verifier prompts, verification pass | Built for this hackathon |
 | Deterministic rule scanner + rule catalogue | Built for this hackathon |
 | 15-case migration corpus + labels + scorer | Built for this hackathon |
 | REST API, persistence, evaluation harness, Next.js UI | Built for this hackathon |
+| Transactional outbox + Kafka transport, audit-event trail, secret redaction, encrypted per-request keys, presigned artifact storage | Built for this hackathon |
 
-No prior personal or employer code is included in this submission.
+The `com.dae.*` sibling services in the parent workspace were used only as a **convention
+reference** (response envelope, audit-outbox shape, masking appender, S3 presign flow) — no
+code from them is copied here. No prior personal or employer code is in this submission.
 
 ## Repo layout
 
@@ -161,16 +175,23 @@ src/main/java/com/migrationsentinel/
   service/llm/       heuristic (offline) + OpenAI + Gemini clients
   service/rules/     DDL parser, rule catalogue, deterministic scanner
   service/eval/      corpus loader, scorer, evaluation runner
+  service/audit/     audit-event trail
+  service/artifact/  presigned object storage for report.md + uploads
+  messaging/         job submission gateway; local (AFTER_COMMIT) + outbox→Kafka transports
+  util/              SecretMasker + masking log appender
 src/main/resources/eval/cases/   the 15 evaluation cases
 frontend/            Next.js 15 review + evaluation UI
-docs/                changelog, reproduction guide, evaluation, safety model, hot take
+docs/                changelog, reproduction guide, evaluation, architecture, safety model
 ```
 
 ## Documentation
 
 - [docs/API_AND_USAGE.md](docs/API_AND_USAGE.md) — **how to run it, every endpoint, request/response, curl, the flow**
 - [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md) — the improvement story, stage by stage
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, the AFTER_COMMIT boundary, where it scales
+- [docs/HACKATHON_EVALUATION.md](docs/HACKATHON_EVALUATION.md) — self-assessment against the rubric, with evidence pointers
 - [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md) — run it from a clean machine
+- [docs/TEST_WITH_IDENTITY_MIGRATIONS.md](docs/TEST_WITH_IDENTITY_MIGRATIONS.md) — reviewing a real service's migration folder
 - [docs/EVALUATION.md](docs/EVALUATION.md) — the metric, the rubric, the results table
 - [docs/AGENT_TRAJECTORIES.md](docs/AGENT_TRAJECTORIES.md) — annotated agent runs
 - [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md) — how consequential actions are contained
