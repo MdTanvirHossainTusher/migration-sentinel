@@ -9,6 +9,7 @@ import com.migrationsentinel.model.entity.ReviewJobEntity;
 import com.migrationsentinel.model.entity.ToolCallEntity;
 import com.migrationsentinel.model.enums.ReviewStatus;
 import com.migrationsentinel.mapper.DtoMapper;
+import com.migrationsentinel.messaging.JobSubmissionGateway;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.Pagination;
 import com.migrationsentinel.payload.dto.MigrationFile;
@@ -34,7 +35,7 @@ public class ReviewService {
     private final ReviewJobRepository reviewJobRepository;
     private final FindingRepository findingRepository;
     private final ToolCallRepository toolCallRepository;
-    private final ReviewRunner reviewRunner;
+    private final JobSubmissionGateway jobGateway;
     private final DtoMapper mapper;
     private final ObjectMapper objectMapper;
 
@@ -67,7 +68,7 @@ public class ReviewService {
         job.setLlmProvider(request.provider() == null || request.provider().isBlank() ? "heuristic" : request.provider());
         job = reviewJobRepository.saveAndFlush(job);
 
-        reviewRunner.runAsync(job.getId());
+        jobGateway.submitReview(job.getId());
         return mapper.toReviewResponse(job, List.of());
     }
 

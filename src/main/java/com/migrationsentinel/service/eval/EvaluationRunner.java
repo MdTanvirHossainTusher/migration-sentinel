@@ -15,7 +15,6 @@ import com.migrationsentinel.service.ReviewRunner;
 import com.migrationsentinel.service.sandbox.SandboxManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -36,9 +35,18 @@ public class EvaluationRunner {
     private final ReviewRunner reviewRunner;
     private final SandboxManager sandboxManager;
 
-    @Async("reviewExecutor")
-    public void runAsync(UUID runId, List<String> caseIds) {
-        EvaluationRunEntity run = evaluationRunRepository.findById(runId).orElseThrow();
+    /**
+     * Executes one evaluation run to completion. Called on a worker thread — either the
+     * local dispatcher's pool or a Kafka consumer — always after the row that
+     * {@code EvaluationService.submit} wrote has committed, so the lookup below cannot miss.
+     */
+    public void run(UUID runId, List<String> caseIds) {
+        EvaluationRunEntity run = evaluationRunRepository.findById(runId)
+                .orElseThrow(() -> new IllegalStateException("evaluation run vanished: " + runId));
+        if (run.getStatus() == EvaluationStatus.COMPLETED || run.getStatus() == EvaluationStatus.FAILED) {
+            log.info("evaluation {} already {}, skipping redelivery", runId, run.getStatus());
+            return;
+        }
         try {
             List<EvaluationCase> cases = corpus.subset(caseIds);
             run.setStatus(EvaluationStatus.RUNNING);

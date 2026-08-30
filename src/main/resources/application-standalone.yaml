@@ -18,3 +18,9 @@ spring:
     schemas: sentinel
     default-schema: sentinel
     create-schemas: true
+
+sentinel:
+  messaging:
+    transport: local
+  s3:
+    enabled: false

@@ -2,6 +2,7 @@ package com.migrationsentinel.service.eval;
 
 import com.migrationsentinel.exception.ResourceNotFoundException;
 import com.migrationsentinel.mapper.DtoMapper;
+import com.migrationsentinel.messaging.JobSubmissionGateway;
 import com.migrationsentinel.model.entity.EvaluationRunEntity;
 import com.migrationsentinel.model.enums.EvaluationStatus;
 import com.migrationsentinel.payload.common.PageResult;
@@ -26,7 +27,7 @@ public class EvaluationService {
 
     private final EvaluationRunRepository evaluationRunRepository;
     private final EvaluationCaseResultRepository caseResultRepository;
-    private final EvaluationRunner evaluationRunner;
+    private final JobSubmissionGateway jobGateway;
     private final EvaluationCorpus corpus;
     private final DtoMapper mapper;
 
@@ -41,7 +42,7 @@ public class EvaluationService {
         run.setTotalCases(corpus.subset(request.caseIds()).size());
         run = evaluationRunRepository.saveAndFlush(run);
 
-        evaluationRunner.runAsync(run.getId(), request.caseIds());
+        jobGateway.submitEvaluation(run.getId(), request.caseIds());
         return mapper.toEvaluationRunResponse(run);
     }
 

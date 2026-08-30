@@ -15,7 +15,6 @@ import com.migrationsentinel.service.agent.RecordedToolCall;
 import com.migrationsentinel.service.agent.TrajectoryRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -36,17 +35,12 @@ public class ReviewRunner {
     private final ToolCallRepository toolCallRepository;
     private final MigrationReviewOrchestrator orchestrator;
 
-    @Async("reviewExecutor")
-    public void runAsync(UUID jobId) {
-        try {
-            execute(jobId);
-        } catch (Exception ex) {
-            log.error("review {} failed", jobId, ex);
-            markFailed(jobId, ex.getMessage());
-        }
-    }
-
-    /** Synchronous path used by the evaluation harness. */
+    /**
+     * Executes one review to completion. Invoked on a worker thread (the local dispatcher's
+     * pool or a Kafka consumer), always after {@code ReviewService.submit} has committed the
+     * row. Idempotent: a job that already finished is left alone, so an at-least-once
+     * redelivery does no harm.
+     */
     public ReviewJobEntity runSync(UUID jobId) {
         try {
             return execute(jobId);
@@ -59,6 +53,10 @@ public class ReviewRunner {
     private ReviewJobEntity execute(UUID jobId) {
         ReviewJobEntity job = reviewJobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalStateException("review job vanished: " + jobId));
+        if (job.getStatus() == ReviewStatus.COMPLETED || job.getStatus() == ReviewStatus.FAILED) {
+            log.info("review {} already {}, skipping redelivery", jobId, job.getStatus());
+            return job;
+        }
         job.setStatus(ReviewStatus.RUNNING);
         job.setStartedAt(Instant.now());
         reviewJobRepository.saveAndFlush(job);
