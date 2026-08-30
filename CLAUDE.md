@@ -7,7 +7,7 @@ Guidance for Claude Code working in this repo.
 ```bash
 ./gradlew test                                    # fast unit tests, no Docker
 ./gradlew sandboxTest                              # Testcontainers tests (needs Docker)
-./gradlew sandboxTest --tests '*EvaluationHarnessTest*'   # the measured-improvement table
+./gradlew evaluationTest                           # the measured-improvement table (needs Docker)
 ./gradlew bootRun --args='--spring.profiles.active=standalone'   # backend, H2 metadata DB
 docker compose up --build                          # full stack (frontend :3000, api :8080)
 cd frontend && npm install && npm run dev          # frontend only
@@ -52,6 +52,10 @@ Agentic reviewer for Flyway migrations. `com.migrationsentinel`.
   findings by `ruleCode` (+ optional `severity`).
 - The 5 `ReviewMode` values map 1:1 to the stages in `docs/CHANGELOG_IMPROVEMENT.md`.
 - Sandbox tests carry `@SandboxTest` (`@Tag("sandbox")`), excluded from `./gradlew test`.
+  `sandboxTest` runs them *except* `EvaluationHarnessTest`, which has its own `evaluationTest`
+  task and CI job — it is minutes of work and was previously running twice per build.
+- An evaluation run leases **one** sandbox container and wipes it between cases
+  (`SandboxManager.leaseForEvaluation`). Per-case containers made the harness time out in CI.
 
 ## Safety invariant
 

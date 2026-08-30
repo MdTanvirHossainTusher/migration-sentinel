@@ -8,10 +8,16 @@ expensive failure). Secondary: **false positives per case** (alert fatigue makes
 reviewer ignore the tool) and **F1**. The label severity is checked too — reporting
 `SET NOT NULL` as a risk on an empty table is scored as a false positive, not a hit.
 
-**How to reproduce this table.** `./gradlew sandboxTest --tests '*EvaluationHarnessTest*'`
+**How to reproduce this table.** `./gradlew evaluationTest`
 runs all five stages over the corpus with the offline heuristic brain (deterministic, no
 API key) and prints it. The test also asserts the direction of every delta, so a
 regression fails CI.
+
+Stage 5 leaves the corpus numbers untouched by construction — every case has a handful of
+baseline files, so none of them exercise a real repository's history. Its evidence is a
+220-file service instead, and the reason the corpus could not see the defect is the most
+useful thing in this document.
+
 
 | Stage | What changed | P | R | F1 | FP/case | Cases passed |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -20,6 +26,7 @@ regression fails CI.
 | 2 · + sandbox migration run | Agent replays baseline + seed, then runs the candidate statement-by-statement; drift check now works | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 3 · + verification pass | Every finding must cite tool output or it is dropped / flagged UNVERIFIED | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 4 · + analyzer/verifier split | A dedicated verifier agent with its own prompt and tools, so the analyzer never grades itself | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
+| 5 · + whole migration history | Reviews against every prior migration in the repo, in Flyway order, in the schema they build | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 
 ---
 
@@ -114,6 +121,46 @@ into agreeing. This is the configuration the demo and the default API mode use.
 **Decision.** Kept as the default (`ANALYZER_VERIFIER_SPLIT`). Stages 0–3 stay in the
 codebase and are selectable per review, which is how the table above is generated.
 
+## Stage 5 — Review against the whole migration history
+
+**What we tried and why.** Stages 0–4 are measured on the 15-case corpus, where each case
+carries one hand-written `baseline.sql`. Pointing the tool at a real service exposed the gap
+that framing hides: the candidate does not run against *a* predecessor, it runs against
+*every* migration that came before it. The API accepted only a single pre-concatenated
+`baseline_sql` capped at 500 KB, and the UI offered one textarea to paste it into. Our own
+`kc-mis-identity` is 220 files and 2.9 MB — the request was rejected with a 400 before
+anything ran, so on the repo this tool was built for, the answer was never grounded at all.
+
+Replaced it with a file-list input (`baseline_migrations`), a folder dropzone in the UI, and
+ordering that is Flyway's rather than the filesystem's.
+
+**Evidence.** The corpus numbers are unchanged (1.00 / 1.00 / 1.00) — every case has fewer
+than ten baseline files, so nothing in the table exercises this. That is the point: the
+corpus could not see the defect. The evidence is on a real repository instead:
+
+| | Before | After |
+| --- | --- | --- |
+| `kc-mis-identity` (220 files, 2.9 MB) | rejected — over the 500 KB cap | 220 / 220 files, 1,538 statements replayed in ~35 s |
+| Schemas introspected | `public` only (hardcoded) | all 11 the migrations build (`auth`, `identity`, `rbac`, …), 155 tables |
+| Replay failure at file 84 | `sandbox setup failed: schema "identity" does not exist` | names the file, the statement, and how far it got |
+
+Three defects fell out of running it for real, none of which the corpus could catch:
+
+- **Ordering.** Sorted as text, `V10` precedes `V2`. Any project past nine migrations was
+  being replayed into a schema that never existed. Versions are now compared numerically.
+- **Fabricated evidence.** `SchemaFacts` treated `baselineApplied` as "the sandbox measured
+  something". A half-applied baseline reports zero tables, so the unindexed-FK rule emitted
+  *"checked via pg_index"* for a lookup that never ran — the exact failure the verifier stage
+  exists to prevent, arriving through the deterministic path where no verifier looks. It now
+  keys off `schemaObserved`, per table.
+- **A structure-only pass claimed "safe to merge".** With no sandbox, an empty findings list
+  means *unchecked*, not *clean*. It now says so, in the report and the UI.
+
+**Decision.** Kept. The corpus measures whether the agent reasons correctly given a schema;
+this stage is about whether it can be pointed at a schema anyone actually has. Lesson: an
+evaluation corpus tells you your agent is right, not that your product is usable — the
+fixture shape (one small baseline file) was itself an assumption, and it hid a 400.
+
 ---
 
 ## Experiments we removed
@@ -149,6 +196,28 @@ harness caught it — F1 fell from 1.00 to 0.71.
 runs, and the introspector falls back to an exact `COUNT(*)` only when the estimate looks
 small. Lesson: a fixture that fakes scale is fragile to anything that recomputes
 statistics — the evaluation harness is what makes that visible.
+
+### One sandbox container per evaluation case
+
+**Tried.** Every review starts its own disposable Postgres, evaluation cases included. It is
+the obvious reading of the safety rule ("a fresh container per review") and it is trivially
+correct: no case can contaminate another.
+
+**Evidence.** The first CI run that actually executed these tests timed out. The corpus is 15
+cases and four of the five stages use a sandbox, so a full run is 60 container starts — about
+60 s per case on a GitHub runner, almost entirely churn, against a 15-minute-per-stage budget.
+A `sentinel.sandbox.reuse-within-evaluation` property already existed for this, was documented
+in the config class, and was set to `true` in `application.yaml` — and was read by nothing. It
+had never been wired up, and nothing noticed because the job it would have helped had never
+run: `gradlew` was committed non-executable, so all three Gradle CI jobs had been failing at
+`Permission denied` since the repo was created.
+
+**Decision.** Implemented the lease the property promised. An evaluation run holds one
+container and wipes it between cases — dropping every non-system schema and resetting the
+database-level `search_path`, not just `public`, because migrations create schemas of their own
+and the replayer pins a search path. Still disposable: created for the run, destroyed with it.
+Lesson: a green checkmark that never ran is worse than a red one, and a configuration knob
+nobody reads is indistinguishable from a comment.
 
 ---
 

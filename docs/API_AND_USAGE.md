@@ -553,7 +553,7 @@ curl -s http://localhost:8080/api/v1/evaluations -H 'content-type: application/j
 ```
 
 Expected (offline heuristic brain, deterministic — also produced by
-`./gradlew sandboxTest --tests '*EvaluationHarnessTest*'`):
+`./gradlew evaluationTest`):
 
 | stage | P | R | F1 | FP/case | cases passed |
 | --- | --- | --- | --- | --- | --- |

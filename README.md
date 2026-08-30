@@ -97,7 +97,7 @@ the page — or click **Load example** to see the whole flow first.
 Run the whole evaluation from the CLI:
 
 ```bash
-./gradlew sandboxTest --tests '*EvaluationHarnessTest*'
+./gradlew evaluationTest
 ```
 
 Full setup, commands, versions, runtime and cost: [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md).
