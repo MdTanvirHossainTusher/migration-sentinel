@@ -31,6 +31,13 @@ public class LlmProperties {
         private String apiKey = "";
         private String baseUrl = "https://api.openai.com/v1";
         private String model = "gpt-5.6-luna";
+
+        /**
+         * {@code reasoning_effort} for the GPT-5 line. Chat Completions + function tools on a
+         * gpt-5.* model requires this to be {@code none}; it is only sent for models that
+         * accept it, so switching {@code model} back to gpt-4o-mini needs no change here.
+         */
+        private String reasoningEffort = "none";
     }
 
     @Getter

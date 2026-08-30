@@ -66,9 +66,21 @@ public class OpenAiLlmClient implements LlmClient {
                     + "or a per-request llm_api_key)");
         }
         try {
+            String model = properties.getOpenai().getModel();
+            boolean gpt5 = model != null && model.toLowerCase().startsWith("gpt-5");
+
             ObjectNode body = mapper.createObjectNode();
-            body.put("model", properties.getOpenai().getModel());
-            body.put("temperature", 0);
+            body.put("model", model);
+            if (gpt5) {
+                // gpt-5.* reject temperature != 1, and need reasoning_effort=none for function
+                // tools on /v1/chat/completions.
+                String effort = properties.getOpenai().getReasoningEffort();
+                if (effort != null && !effort.isBlank()) {
+                    body.put("reasoning_effort", effort);
+                }
+            } else {
+                body.put("temperature", 0);
+            }
             body.set("messages", encodeMessages(messages));
             if (tools != null && !tools.isEmpty()) {
                 body.set("tools", encodeTools(tools));
