@@ -7,6 +7,13 @@ messages.
 For the story of how the *agent* improved across iterations — the hackathon deliverable —
 see [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
 
+## [0.3.1](https://github.com/MdTanvirHossainTusher/migration-sentinel/compare/v0.3.0...v0.3.1) (2026-08-30)
+
+
+### Documentation
+
+* real-model evaluation numbers, submission text ([4560da9](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/4560da9096c28953019bc31bf5e0110d57ca8e42))
+
 ## [0.3.0](https://github.com/MdTanvirHossainTusher/migration-sentinel/compare/v0.2.0...v0.3.0) (2026-08-30)
 
 
