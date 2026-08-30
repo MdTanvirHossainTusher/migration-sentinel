@@ -30,7 +30,7 @@ public class LlmProperties {
     public static class Openai {
         private String apiKey = "";
         private String baseUrl = "https://api.openai.com/v1";
-        private String model = "gpt-4o-mini";
+        private String model = "gpt-5.6-luna";
     }
 
     @Getter

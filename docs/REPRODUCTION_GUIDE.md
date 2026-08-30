@@ -162,8 +162,10 @@ curl -s -XPOST localhost:8080/api/v1/reviews -H 'content-type: application/json'
 **On the server.** Put the key in `.env` (`OPENAI_API_KEY=` / `GEMINI_API_KEY=`) before
 `docker compose up`. The provider dropdown then shows it as "key on server".
 
-Cost: ≈ $0.01–0.03 per review on `gpt-4o-mini`, ≈ $0.20 for the full evaluation. Full
-walkthrough for a real service's folder: [TEST_WITH_IDENTITY_MIGRATIONS.md](TEST_WITH_IDENTITY_MIGRATIONS.md).
+Cost: ≈ $0.005 per review on the default `gpt-5.6-luna` ($0.20/$1.20 per 1M in/out),
+≈ $0.10–0.25 for the full 15-case evaluation. Use a paid key for the evaluation — 15 cases
+hit a free-tier rate limit. Full walkthrough for a real service's folder:
+[TEST_WITH_IDENTITY_MIGRATIONS.md](TEST_WITH_IDENTITY_MIGRATIONS.md).
 
 ## Data
 
