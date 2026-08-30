@@ -108,6 +108,13 @@ tasks.register('sandboxTest', Test) {
 	// Docker Engine 25+ rejects the docker-java default API version (1.32) with HTTP 400.
 	// Pin a version the daemon's minimum (1.40+) accepts. Overridable via the environment.
 	environment 'DOCKER_API_VERSION', System.getenv('DOCKER_API_VERSION') ?: '1.44'
+	systemProperty 'api.version', '1.44'
+	if (System.getenv('DOCKER_HOST') != null) {
+		environment 'DOCKER_HOST', System.getenv('DOCKER_HOST')
+	}
+	if (System.getenv('TESTCONTAINERS_RYUK_DISABLED') != null) {
+		environment 'TESTCONTAINERS_RYUK_DISABLED', System.getenv('TESTCONTAINERS_RYUK_DISABLED')
+	}
 	shouldRunAfter tasks.named('test')
 }
 
@@ -131,6 +138,13 @@ tasks.register('evaluationTest', Test) {
 		includeTestsMatching '*EvaluationHarnessTest*'
 	}
 	environment 'DOCKER_API_VERSION', System.getenv('DOCKER_API_VERSION') ?: '1.44'
+	systemProperty 'api.version', '1.44'
+	if (System.getenv('DOCKER_HOST') != null) {
+		environment 'DOCKER_HOST', System.getenv('DOCKER_HOST')
+	}
+	if (System.getenv('TESTCONTAINERS_RYUK_DISABLED') != null) {
+		environment 'TESTCONTAINERS_RYUK_DISABLED', System.getenv('TESTCONTAINERS_RYUK_DISABLED')
+	}
 	shouldRunAfter tasks.named('test')
 }
 
