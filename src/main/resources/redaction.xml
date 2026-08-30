@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Extra redaction patterns, layered on top of the compiled-in defaults in
+  util/SecretMasker (which cover sk-* / AIza* keys, bearer tokens, key=value
+  assignments and JDBC passwords). Each <pattern> is a Java regex; if it has a
+  capturing group, group 1 is kept and the rest is replaced with ***REDACTED***.
+  Loaded by config/RedactionConfig once the Spring context is up.
+-->
+<redaction>
+    <patterns>
+        <!-- Slack tokens -->
+        <pattern>xox[baprs]-[A-Za-z0-9-]{10,}</pattern>
+        <!-- GitHub tokens -->
+        <pattern>gh[pousr]_[A-Za-z0-9]{20,}</pattern>
+        <!-- AWS access key ids -->
+        <pattern>AKIA[0-9A-Z]{16}</pattern>
+    </patterns>
+</redaction>

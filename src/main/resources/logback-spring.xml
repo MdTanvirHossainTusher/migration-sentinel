@@ -2,7 +2,9 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
-    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <!-- Masks anything that looks like a credential (API keys, bearer tokens, JDBC
+         passwords) before the line is written. See util/SecretMasker + redaction.xml. -->
+    <appender name="CONSOLE" class="com.migrationsentinel.util.MaskingConsoleAppender">
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
         </encoder>
