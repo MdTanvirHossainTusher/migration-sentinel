@@ -279,6 +279,33 @@ handler · presigned direct-to-storage · retry-with-backoff honouring provider 
 
 Full request flow and where it scales: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## CI/CD & releases
+
+GitHub Actions, three workflows in [`.github/workflows/`](.github/workflows/):
+
+**`ci.yml`** — on every PR and push to `main`, four jobs run in parallel (and skip
+`release-please--*` branches; in-progress PR runs are cancelled on a new push):
+
+| Job | Command | What it guards |
+| --- | --- | --- |
+| `backend` | `./gradlew test` | fast unit tests, no Docker |
+| `sandbox` | `./gradlew sandboxTest` | Testcontainers integration tests — the sandbox lifecycle, introspection, replay, the URL guard (ubuntu-latest ships a Docker daemon) |
+| `evaluation` | `./gradlew evaluationTest` | runs the 15-case corpus through the baseline and the full agent and **asserts the agent wins** — recall and F1 up, false positives down, no stage regresses. A change that breaks the improvement fails here. 45-min timeout. |
+| `frontend` | `npm run build` | Next.js production build + type-check |
+
+**`pr-title.yml`** — rejects any PR whose title is not a Conventional Commit
+(`feat:` / `fix:` / `docs:` / …), so release automation stays deterministic.
+
+**`release-please.yml`** — on push to `main`, [`googleapis/release-please-action@v5`](https://github.com/googleapis/release-please)
+(`release-type: simple`) reads the conventional commits since the last release, opens/updates
+a **release PR** that bumps the `// x-release-please-version` line in `build.gradle` and
+regenerates `CHANGELOG.md` grouped by type (Features / Bug Fixes / Performance / …). Merging
+that PR tags the release. Config in [`release-please-config.json`](release-please-config.json)
++ [`.release-please-manifest.json`](.release-please-manifest.json).
+
+`CHANGELOG.md` is the machine-generated release log; the hand-written story of how the agent
+got good is [`docs/CHANGELOG_IMPROVEMENT.md`](docs/CHANGELOG_IMPROVEMENT.md).
+
 ## Prior work
 
 | Component | Origin |
