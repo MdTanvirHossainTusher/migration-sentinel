@@ -7,6 +7,43 @@ messages.
 For the story of how the *agent* improved across iterations — the hackathon deliverable —
 see [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
 
+## [0.3.0](https://github.com/MdTanvirHossainTusher/migration-sentinel/compare/v0.2.0...v0.3.0) (2026-08-30)
+
+
+### Features
+
+* **artifacts:** presigned s3 upload/confirm and downloadable report.md ([7bcbf3c](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/7bcbf3c7f6e06580b2c081f216f016ab5b2990e0))
+* **audit:** declarative @Audited aspect for api operations, ordered inside the tx advice ([19c62b3](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/19c62b37659703f98652661404a5a247dd584c15))
+* **audit:** durable audit-event trail with kafka relay ([8460f38](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/8460f387e2afcef02b7c82837416d42211a69ad5))
+* **compose:** bundle dind sandbox, kafka and rustfs for a one-command stack ([2991113](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/29911135b430ad9447041bccf73133b4f5acb289))
+* **llm:** per-request api key, encrypted at rest ([6e0e782](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/6e0e782ebdfeb9eaced9b8c0b75fcfc52bc0e0c1))
+* **logging:** mask credentials in console output, audit payloads and trajectories ([1e2866f](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/1e2866fc2cbdd3169aaf9e3d7fd96deb2e480c98))
+* **messaging:** transactional outbox with kafka transport and after-commit dispatch ([ca7884a](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/ca7884afbc9d374511ea3df1eec2ada63e549bd2))
+
+
+### Bug Fixes
+
+* **compose:** rustfs healthcheck accepts the s3 api 403 response ([8f0b1e9](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/8f0b1e9ff4fccd712eb7aa4a95d8eb25b2e13eb6))
+* **crypto:** accept any secret string; quiet 404s for unknown endpoints ([7bf9781](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/7bf97811a0194d945395404b915ef1a4f25737fc))
+* **eval:** null-safe caseIds when submitting an evaluation over kafka ([729ff1b](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/729ff1b49b4f06ed45140c790b1c6899adcacc38))
+* **evaluation:** applied audit on service methods ([ed50e22](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/ed50e2255fc27601d249cf0e2e406404fec597e9))
+* **gemini:** echo thought_signature for gemini 3 tools; flatten provider errors; default to gemini-flash-latest ([95e1e5e](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/95e1e5e1fb8c342f4f02eb207e14b3ac1933316f))
+* **llm:** retry 429/503 with backoff; fix snake_case on the evaluation cases endpoint ([295ded1](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/295ded16691a2166b3fa6314c893354f200109ad))
+* **openai:** gpt-5 line needs reasoning_effort=none and no temperature for function tools ([7c81c88](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/7c81c880d6ca81d99177e0da0258d1ee3e135a15))
+
+
+### Documentation
+
+* add platform, patterns and tools section to the readme ([2226e1c](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/2226e1c7ffdefca8f899b31fb08f4afaafd11638))
+* describe the ci/cd workflows and release-please automation ([ea61b92](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/ea61b928073b24b92ee68304cccd20be28dddaed))
+* reviewer walkthrough, committed agent traces, stage-7 changelog ([b6e0ec0](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/b6e0ec0175083d2be9f440c0c8a92eacda3ba388))
+* stage-6 changelog, architecture, hackathon evaluation and reproduction updates ([d805ce3](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/d805ce3e993bdac32c6dd74d77db655c4decb4a8))
+
+
+### Code Refactoring
+
+* **architecture:** add outbox pattern, kafka, schedular, presigned url, S3, masking ([0364169](https://github.com/MdTanvirHossainTusher/migration-sentinel/commit/0364169fce8884706961a836b5a01547186cb634))
+
 ## [0.2.0](https://github.com/MdTanvirHossainTusher/migration-sentinel/compare/v0.1.0...v0.2.0) (2026-08-30)
 
 
