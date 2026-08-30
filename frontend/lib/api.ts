@@ -143,6 +143,32 @@ export type Health = {
   timestamp: string;
 };
 
+/**
+ * Turn any error string into a headline + optional detail block. The backend already
+ * flattens provider errors ("Gemini API error (404): This model is no longer available…"),
+ * but if a raw JSON body ever leaks through — from an upstream service, say — this pulls the
+ * human sentence out of `error.message` and keeps the rest for a collapsible "details".
+ */
+export function parseApiError(raw: string): { message: string; details?: string } {
+  if (!raw) return { message: "Something went wrong." };
+  const brace = raw.indexOf("{");
+  if (brace === -1) return { message: raw };
+
+  const prefix = raw.slice(0, brace).trim().replace(/[:\-\s]+$/, "");
+  try {
+    const json = JSON.parse(raw.slice(brace));
+    const err = json.error ?? json;
+    const message = err.message ?? err.msg ?? raw;
+    const rest: Record<string, unknown> = { ...err };
+    delete rest.message;
+    delete rest.msg;
+    const details = Object.keys(rest).length ? JSON.stringify(rest, null, 2) : undefined;
+    return { message: prefix ? `${prefix}: ${message}` : message, details };
+  } catch {
+    return { message: raw };
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<ApiEnvelope<T>> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,

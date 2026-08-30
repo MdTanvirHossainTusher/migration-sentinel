@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, EvaluationCaseMeta, EvaluationRun, Health, ReviewMode } from "@/lib/api";
+import { ErrorBox } from "@/lib/ErrorBox";
 
 const pct = (n?: number) => (n == null ? "—" : `${(n * 100).toFixed(0)}%`);
 
@@ -14,6 +15,7 @@ export default function EvaluationsPage() {
   const [provider, setProvider] = useState("heuristic");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = () => api.listEvaluations().then(setRuns).catch(() => {});
 
@@ -27,6 +29,7 @@ export default function EvaluationsPage() {
 
   const run = async () => {
     setBusy(true);
+    setError(null);
     try {
       await api.runEvaluation({
         mode,
@@ -35,6 +38,8 @@ export default function EvaluationsPage() {
         llmApiKey: provider === "heuristic" ? undefined : apiKey.trim() || undefined,
       });
       refresh();
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -96,6 +101,11 @@ export default function EvaluationsPage() {
             <p className="muted">
               Used for this run only, encrypted at rest, never returned or logged. Not stored in your browser.
             </p>
+          </div>
+        )}
+        {error && (
+          <div style={{ marginTop: 10 }}>
+            <ErrorBox error={error} />
           </div>
         )}
       </div>

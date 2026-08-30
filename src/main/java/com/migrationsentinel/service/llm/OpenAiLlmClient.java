@@ -85,8 +85,7 @@ public class OpenAiLlmClient implements LlmClient {
 
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
-                throw new LlmProviderException("OpenAI returned HTTP " + response.statusCode() + ": "
-                        + truncate(response.body()));
+                throw new LlmProviderException(providerError("OpenAI", response.statusCode(), response.body()));
             }
             JsonNode message = mapper.readTree(response.body()).path("choices").path(0).path("message");
             List<LlmToolCall> calls = new ArrayList<>();
@@ -162,6 +161,22 @@ public class OpenAiLlmClient implements LlmClient {
             arr.add(t);
         }
         return arr;
+    }
+
+    /** Pull the readable sentence out of {@code {"error":{"message": ...}}} for the UI. */
+    private String providerError(String provider, int status, String body) {
+        try {
+            JsonNode error = mapper.readTree(body).path("error");
+            String message = error.path("message").asText("");
+            if (!message.isBlank()) {
+                String code = error.path("code").isMissingNode()
+                        ? String.valueOf(status) : error.path("code").asText(String.valueOf(status));
+                return provider + " API error (" + code + "): " + message;
+            }
+        } catch (Exception ignored) {
+            // fall through to the raw body
+        }
+        return provider + " returned HTTP " + status + ": " + truncate(body);
     }
 
     private String truncate(String s) {

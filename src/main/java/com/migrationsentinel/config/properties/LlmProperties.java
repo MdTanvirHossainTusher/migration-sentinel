@@ -38,6 +38,6 @@ public class LlmProperties {
     public static class Gemini {
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
-        private String model = "gemini-2.0-flash";
+        private String model = "gemini-flash-latest";
     }
 }
