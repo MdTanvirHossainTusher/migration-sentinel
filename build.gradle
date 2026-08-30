@@ -111,6 +111,29 @@ tasks.register('sandboxTest', Test) {
 	shouldRunAfter tasks.named('test')
 }
 
+// The whole-corpus evaluation is minutes of work, not seconds, and it has its own CI job.
+// Leaving it in `sandboxTest` meant the expensive run happened twice per build.
+tasks.named('sandboxTest') {
+	filter {
+		excludeTestsMatching '*EvaluationHarnessTest*'
+	}
+}
+
+tasks.register('evaluationTest', Test) {
+	description = 'Runs the 15-case evaluation across the whole improvement curve (needs Docker)'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'sandbox'
+	}
+	filter {
+		includeTestsMatching '*EvaluationHarnessTest*'
+	}
+	environment 'DOCKER_API_VERSION', System.getenv('DOCKER_API_VERSION') ?: '1.44'
+	shouldRunAfter tasks.named('test')
+}
+
 def resourceProjectVersion = version.toString()
 
 processResources {

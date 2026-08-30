@@ -38,12 +38,16 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       # ubuntu-latest ships a running Docker daemon, so Testcontainers works here.
+      # Ryuk's reaper container costs a start per session and the runner is torn down anyway.
       - name: Sandbox tests (Testcontainers)
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
         run: ./gradlew sandboxTest
 
   evaluation:
     name: Evaluation smoke (heuristic, offline)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +57,9 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Run the corpus through the baseline and the full agent, assert the agent wins
-        run: ./gradlew sandboxTest --tests '*EvaluationHarnessTest*'
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
+        run: ./gradlew evaluationTest
 
   frontend:
     name: Frontend — build

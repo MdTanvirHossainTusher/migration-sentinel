@@ -19,11 +19,31 @@ public final class SandboxSession implements AutoCloseable {
     private final String username;
     private final String password;
 
+    /**
+     * Whether closing this handle destroys the container. False for a handle borrowed from a
+     * longer-lived lease (an evaluation run reusing one container across its cases): the
+     * borrower must not tear down a container it did not start.
+     */
+    private final boolean owned;
+
     SandboxSession(PostgreSQLContainer<?> container) {
+        this(container, true);
+    }
+
+    private SandboxSession(PostgreSQLContainer<?> container, boolean owned) {
         this.container = container;
         this.jdbcUrl = container.getJdbcUrl();
         this.username = container.getUsername();
         this.password = container.getPassword();
+        this.owned = owned;
+    }
+
+    /**
+     * A handle on the same container whose {@link #close()} is a no-op. The safety guard is
+     * unchanged — it still refuses any URL that is not this sandbox's own.
+     */
+    SandboxSession borrow() {
+        return new SandboxSession(container, false);
     }
 
     public String jdbcUrl() {
@@ -53,6 +73,8 @@ public final class SandboxSession implements AutoCloseable {
 
     @Override
     public void close() {
-        container.stop();
+        if (owned) {
+            container.stop();
+        }
     }
 }
