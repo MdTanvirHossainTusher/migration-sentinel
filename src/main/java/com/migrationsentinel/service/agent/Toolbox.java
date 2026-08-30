@@ -67,9 +67,11 @@ public class Toolbox implements AutoCloseable {
             if (sandbox == null) {
                 cachedRun = SandboxRunResult.unavailable("sandbox disabled or Docker unavailable");
             } else if (applyCandidate) {
-                cachedRun = replayer.replay(sandbox, input.baselineSql(), input.seedSql(), input.migrationSql());
+                cachedRun = replayer.replay(sandbox, input.baselineFilesOrEmpty(), input.baselineSql(),
+                        input.seedSql(), input.migrationSql(), input.targetSchema());
             } else {
-                cachedRun = replayer.replayBaselineOnly(sandbox, input.baselineSql(), input.seedSql());
+                cachedRun = replayer.replayBaselineOnly(sandbox, input.baselineFilesOrEmpty(),
+                        input.baselineSql(), input.seedSql(), input.targetSchema());
             }
         }
         return cachedRun;

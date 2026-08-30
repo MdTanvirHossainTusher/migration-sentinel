@@ -1,5 +1,8 @@
 package com.migrationsentinel.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.migrationsentinel.exception.BadResourceRequestException;
 import com.migrationsentinel.exception.ResourceNotFoundException;
 import com.migrationsentinel.model.entity.FindingEntity;
 import com.migrationsentinel.model.entity.ReviewJobEntity;
@@ -8,6 +11,7 @@ import com.migrationsentinel.model.enums.ReviewStatus;
 import com.migrationsentinel.mapper.DtoMapper;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.Pagination;
+import com.migrationsentinel.payload.dto.MigrationFile;
 import com.migrationsentinel.payload.request.CreateReviewRequest;
 import com.migrationsentinel.payload.response.ReviewReportResponse;
 import com.migrationsentinel.payload.response.ReviewResponse;
@@ -32,15 +36,32 @@ public class ReviewService {
     private final ToolCallRepository toolCallRepository;
     private final ReviewRunner reviewRunner;
     private final DtoMapper mapper;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public ReviewResponse submit(CreateReviewRequest request) {
+        List<MigrationFile> history = MigrationHistory.ordered(request.baselineMigrations());
+        long historyChars = MigrationHistory.totalLength(history);
+        if (historyChars > CreateReviewRequest.MAX_HISTORY_CHARS) {
+            throw new BadResourceRequestException("The migration history is "
+                    + (historyChars / 1_000_000) + " MB, over the "
+                    + (CreateReviewRequest.MAX_HISTORY_CHARS / 1_000_000) + " MB limit. "
+                    + "Trim the oldest migrations, or squash them into a single baseline file.");
+        }
+
         ReviewJobEntity job = new ReviewJobEntity();
         job.setStatus(ReviewStatus.QUEUED);
         job.setMode(request.modeOrDefault());
         job.setMigrationFilename(request.filename());
         job.setMigrationSql(request.migrationSql());
-        job.setBaselineSql(blankToNull(request.baselineSql()));
+        // A supplied history wins over the pre-flattened field: it is the one we can order
+        // ourselves and attribute a replay failure back to a filename.
+        job.setBaselineSql(history.isEmpty()
+                ? blankToNull(request.baselineSql())
+                : MigrationHistory.concat(history));
+        job.setBaselineFileCount(history.size());
+        job.setBaselineFilesJson(toJsonArray(history));
+        job.setTargetSchema(blankToNull(request.targetSchema()));
         job.setSeedSql(blankToNull(request.seedSql()));
         job.setEntitySource(blankToNull(request.entitySource()));
         job.setLlmProvider(request.provider() == null || request.provider().isBlank() ? "heuristic" : request.provider());
@@ -86,5 +107,17 @@ public class ReviewService {
 
     private String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s;
+    }
+
+    /** Ordered filenames only — the SQL itself already lives in {@code baseline_sql}. */
+    private String toJsonArray(List<MigrationFile> history) {
+        if (history.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(history.stream().map(MigrationFile::filename).toList());
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 }

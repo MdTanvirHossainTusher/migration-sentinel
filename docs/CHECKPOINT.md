@@ -44,7 +44,7 @@ Where the project stands, and what a next session should pick up.
 
 ## Sandbox tests — confirmed green
 
-`./gradlew sandboxTest` (MigrationReplayerIT) and `EvaluationHarnessTest` both pass when
+`./gradlew sandboxTest` (MigrationReplayerIT) and `./gradlew evaluationTest` both pass when
 run against a real Linux Docker engine (verified via a `docker:28-dind` engine on this
 machine — Docker Desktop 29's socket proxy breaks the Testcontainers client, so `dind`
 or a Linux host is required locally; CI on `ubuntu-latest` is unaffected — see
@@ -64,7 +64,7 @@ the board, 12/15 → 15/15 cases passed.
 ## How to resume
 
 1. `docker compose up --build`, confirm a review runs end to end via the UI.
-2. `./gradlew test` then `./gradlew sandboxTest`.
+2. `./gradlew test`, then `./gradlew sandboxTest`, then `./gradlew evaluationTest`.
 3. If the harness table differs from the docs, update the two doc tables.
 4. Record the 5-minute solution video (problem → baseline → one live review → evaluation
    comparison → changelog highlight).

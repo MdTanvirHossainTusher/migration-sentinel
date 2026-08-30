@@ -18,14 +18,26 @@ import java.util.Map;
  * Read-only introspection over a sandbox connection. These are the queries behind the
  * agent's read tools: row estimates from pg_class, real shape from information_schema,
  * indexes from pg_index, foreign keys from pg_constraint, and EXPLAIN plans.
+ *
+ * <p>Everything is scoped to "every non-system schema" rather than a hardcoded {@code public}.
+ * A real service's migrations build into schemas of their own — Flyway's
+ * {@code spring.flyway.schemas}, plus any the migrations create themselves — and against a
+ * literal {@code 'public'} these queries find no tables at all, so the review silently loses
+ * every measurement it claims to be based on. Tables are keyed by bare name, matching how
+ * {@link com.migrationsentinel.service.rules.DdlParser} reports the table a statement touches.
  */
 @Slf4j
 @Component
 public class SchemaIntrospector {
 
+
     public List<String> userTables(Connection c) throws SQLException {
         List<String> tables = new ArrayList<>();
-        String sql = "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename";
+        String sql = """
+                SELECT tablename FROM pg_tables
+                WHERE schemaname NOT LIKE 'pg\\_%' AND schemaname <> 'information_schema'
+                ORDER BY tablename
+                """;
         try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             while (rs.next()) {
                 tables.add(rs.getString(1));
@@ -66,7 +78,8 @@ public class SchemaIntrospector {
         String sql = """
                 SELECT column_name, data_type, is_nullable, column_default
                 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = ?
+                WHERE table_schema NOT LIKE 'pg\\_%' AND table_schema <> 'information_schema'
+                  AND table_name = ?
                 ORDER BY ordinal_position
                 """;
         try (PreparedStatement ps = c.prepareStatement(sql)) {
@@ -94,7 +107,9 @@ public class SchemaIntrospector {
                 FROM pg_index ix
                 JOIN pg_class i ON i.oid = ix.indexrelid
                 JOIN pg_class t ON t.oid = ix.indrelid
-                WHERE t.relname = ? AND t.relnamespace = 'public'::regnamespace
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE t.relname = ?
+                  AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
                 """;
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, table);
@@ -123,7 +138,9 @@ public class SchemaIntrospector {
                 FROM pg_constraint con
                 JOIN pg_class src ON src.oid = con.conrelid
                 JOIN pg_class cl ON cl.oid = con.confrelid
-                WHERE con.contype = 'f' AND src.relname = ? AND src.relnamespace = 'public'::regnamespace
+                JOIN pg_namespace n ON n.oid = src.relnamespace
+                WHERE con.contype = 'f' AND src.relname = ?
+                  AND n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
                 """;
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, table);

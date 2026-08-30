@@ -131,17 +131,17 @@ public class DdlParser {
         if (lower.contains("validate constraint")) {
             return simple(index, raw, norm, ParsedStatement.Kind.VALIDATE_CONSTRAINT, table);
         }
-        if (lower.contains("add constraint") && lower.contains("foreign key") || lower.contains("add foreign key")) {
+        if ((lower.contains("add constraint") && lower.contains("foreign key")) || lower.contains("add foreign key")) {
             String ref = tableAfter(norm.replaceAll("(?i).*references", "references"), "references");
             List<String> cols = columnsInParensAfter(norm, "foreign key");
             return new ParsedStatement(index, raw, norm, ParsedStatement.Kind.ADD_FOREIGN_KEY, table,
                     cols, concurrently, null, null, ref, notValid);
         }
-        if (lower.contains("add constraint") && lower.contains("check") || lower.contains("add check")) {
+        if ((lower.contains("add constraint") && lower.contains("check")) || lower.contains("add check")) {
             return new ParsedStatement(index, raw, norm, ParsedStatement.Kind.ADD_CHECK_CONSTRAINT, table,
                     List.of(), concurrently, null, null, null, notValid);
         }
-        if (lower.contains("add constraint") && lower.contains("unique") || lower.contains("add unique")) {
+        if ((lower.contains("add constraint") && lower.contains("unique")) || lower.contains("add unique")) {
             return new ParsedStatement(index, raw, norm, ParsedStatement.Kind.ADD_UNIQUE_CONSTRAINT, table,
                     columnsInParensAfter(norm, "unique"), concurrently, null, null, null, notValid);
         }

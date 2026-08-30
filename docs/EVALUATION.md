@@ -71,7 +71,7 @@ severity matches. Unmatched reported findings are **false positives**; unmatched
 
 ## Results
 
-Run `./gradlew sandboxTest --tests '*EvaluationHarnessTest*'`. It executes all five pipeline
+Run `./gradlew evaluationTest`. It executes all five pipeline
 stages over the corpus with the offline heuristic brain and prints the table. Deterministic
 — same numbers every run, no API key. Last confirmed run (Linux Docker engine, ~4.5 min):
 
@@ -95,6 +95,23 @@ ANALYZER_VERIFIER_SPLIT       1.00   1.00   1.00       0.00     15/15
 | Cost / case | ~$0 (one short prompt) | ~$0 offline; ~$0.01–0.03 with `provider=openai` | — |
 
 Per-stage breakdown and the story of each jump: [CHANGELOG_IMPROVEMENT.md](CHANGELOG_IMPROVEMENT.md).
+
+### What this corpus does not measure
+
+Worth stating plainly, because it cost us a real defect. Every case supplies one small
+`baseline.sql`. That makes the cases fast and deterministic, but it bakes in an assumption —
+that a migration's history is a handful of statements — which no real service satisfies.
+
+Pointed at `kc-mis-identity` (220 migration files, 2.9 MB, 11 schemas), the tool returned a
+400 before running anything: the API capped the baseline at 500 KB. The corpus scored 1.00
+across the board the entire time. A second defect hid in the same blind spot — migration
+files were being ordered as strings, so `V10` replayed before `V2`, which no case with fewer
+than ten baseline files can expose.
+
+Both are fixed (stage 5). The measurements are in the changelog, and they are timings and
+file counts against a real repository rather than corpus scores, because the corpus is
+structurally unable to move on them. The lesson we would carry to the next project: a fixture
+is an assumption, and a suite that only ever scores 1.00 has stopped telling you anything.
 
 ### Running it with a real LLM
 

@@ -19,7 +19,10 @@ public record SchemaFacts(List<TableStat> tables, long largeTableThreshold, bool
     }
 
     public static SchemaFacts from(SandboxRunResult run, long threshold) {
-        return new SchemaFacts(run.tableStatsAfter(), threshold, run.candidateApplied() || run.baselineApplied());
+        // schemaObserved, not baselineApplied: a run whose baseline half-applied or whose
+        // snapshot failed reports no tables, and treating that as "the sandbox looked" makes
+        // the rules cite pg_index for a lookup that never happened.
+        return new SchemaFacts(run.tableStatsAfter(), threshold, run.schemaObserved());
     }
 
     public Optional<TableStat> table(String name) {
@@ -28,6 +31,11 @@ public record SchemaFacts(List<TableStat> tables, long largeTableThreshold, bool
         }
         String target = name.toLowerCase(Locale.ROOT);
         return tables.stream().filter(t -> t.table().equalsIgnoreCase(target)).findFirst();
+    }
+
+    /** True only when this specific table was read back from the sandbox. */
+    public boolean measured(String table) {
+        return sandboxRan && table(table).isPresent();
     }
 
     /** Best available row estimate for a table, or -1 when the sandbox could not measure it. */

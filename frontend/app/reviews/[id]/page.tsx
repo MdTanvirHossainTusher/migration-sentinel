@@ -54,6 +54,10 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
           <div className="l">findings</div>
         </div>
         <div>
+          <div className="n">{r.baseline_file_count}</div>
+          <div className="l">prior migrations</div>
+        </div>
+        <div>
           <div className="n">{r.tool_call_count}</div>
           <div className="l">tool calls</div>
         </div>
@@ -70,6 +74,32 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
       {running && <p className="muted">Agent is working… this page refreshes itself.</p>}
       {r.error_message && <pre className="err">{r.error_message}</pre>}
 
+      {r.sandbox_note && (
+        <div className="notice bad">
+          <h4>This review is not grounded in a sandbox run</h4>
+          <p>
+            The prior migrations did not finish replaying, so the candidate was never measured against a
+            real schema. What you see below comes from reading the SQL alone — an empty findings list here
+            means <b>not checked</b>, not <b>safe</b>.
+          </p>
+          <pre>{r.sandbox_note}</pre>
+          <p className="muted" style={{ marginTop: 10 }}>
+            Usually one migration in the history needs something the sandbox does not have — an extension,
+            a role, or a database that already exists. Untick that file on the review page and run again.
+          </p>
+        </div>
+      )}
+
+      {r.status === "COMPLETED" && !r.sandbox_used && !r.sandbox_note && (
+        <div className="notice">
+          <h4>Structure-only review</h4>
+          <p>
+            No sandbox ran, so findings come from the SQL text alone and nothing here is backed by a row
+            count or a measured lock. Start Docker and re-run for the grounded version.
+          </p>
+        </div>
+      )}
+
       {r.status === "COMPLETED" && (
         <>
           <div style={{ display: "flex", gap: 10, margin: "18px 0" }}>
@@ -83,7 +113,26 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
           {tab === "report" &&
             (report.findings.length === 0 ? (
               <div className="panel">
-                <b>Safe to merge.</b> <span className="muted">No production-safety defects found.</span>
+                {r.sandbox_used ? (
+                  <>
+                    <b>Safe to merge.</b>{" "}
+                    <span className="muted">
+                      No production-safety defects found. The candidate applied cleanly against{" "}
+                      {r.baseline_file_count > 0
+                        ? `the schema left by ${r.baseline_file_count} prior migration(s)`
+                        : "an empty schema"}
+                      .
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <b>Not established — nothing was measured.</b>{" "}
+                    <span className="muted">
+                      No sandbox ran, so this is a read of the SQL text alone. An empty list here means
+                      unchecked, not safe. See the note above.
+                    </span>
+                  </>
+                )}
               </div>
             ) : (
               report.findings.map((f) => <FindingCard key={f.id} f={f} />)

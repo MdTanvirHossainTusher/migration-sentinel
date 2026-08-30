@@ -70,10 +70,11 @@ Expected: one `NOT_NULL_WITHOUT_SAFE_BACKFILL` finding, severity `HIGH`, verdict
 ## The evaluation (the measured-improvement result)
 
 ```bash
-./gradlew sandboxTest --tests '*EvaluationHarnessTest*'
+./gradlew evaluationTest
 ```
 
-- Runtime: ≈ 8–15 min (each of 15 cases × 4 sandbox stages spins a fresh Postgres container).
+- Runtime: ≈ 3–6 min. The run leases **one** Postgres container and wipes it between cases;
+  a container per case pushed this past 15 min per stage and timed CI out.
 - Output: a table printed to the console —
 
   ```
@@ -88,11 +89,57 @@ Expected: one `NOT_NULL_WITHOUT_SAFE_BACKFILL` finding, severity `HIGH`, verdict
 - The test **asserts** recall/F1 go up and false positives go down from baseline to full
   agent, and that no stage regresses. A code change that breaks the improvement fails here.
 
+Run the sandbox integration tests (Docker, ≈ 1 min — the evaluation is a separate task so
+this stays quick):
+
+```bash
+./gradlew sandboxTest
+```
+
 Run the unit tests (fast, no Docker):
 
 ```bash
 ./gradlew test
 ```
+
+## Reviewing a real repository's migration folder
+
+The 15-case corpus gives each case one small baseline file. A real service has hundreds, and
+that is the case the tool is built for.
+
+1. Open <http://localhost:3000> and drop your `src/main/resources/db/migration` folder onto
+   step 1. Every `.sql` file is read in the browser and ordered by Flyway version — `V10`
+   after `V2`, repeatable (`R__`) migrations last, undo (`U__`) files skipped.
+2. The newest file is selected as the candidate; everything before it becomes the baseline.
+   Press **review** on any other row to review that migration against only what preceded it.
+3. Step 2 asks for the schema your migrations build into — your project's
+   `spring.flyway.schemas`. Flyway creates it at boot so the migrations never mention it, and
+   without it the replay stops at the first schema-qualified name. The page detects likely
+   candidates from the SQL and offers them.
+4. Untick any migration the sandbox cannot run unchanged (one needing an extension, a role,
+   or production-only data).
+
+The equivalent API call sends the files rather than one blob, which is what lets a failure
+name the migration that caused it:
+
+```bash
+curl -s -X POST localhost:8080/api/v1/reviews \
+  -H 'Content-Type: application/json' -d '{
+  "baseline_migrations": [
+    {"filename": "V1__init.sql",   "sql": "CREATE TABLE orders (id bigserial PRIMARY KEY);"},
+    {"filename": "V2__status.sql", "sql": "ALTER TABLE orders ADD COLUMN status varchar(16);"}
+  ],
+  "filename": "V3__status_not_null.sql",
+  "migration_sql": "ALTER TABLE orders ALTER COLUMN status SET NOT NULL;",
+  "target_schema": "public",
+  "mode": "ANALYZER_VERIFIER_SPLIT",
+  "provider": "heuristic"
+}'
+```
+
+Measured on `kc-mis-identity` (220 files, 2.9 MB, 11 schemas): 1,538 statements replayed in
+≈ 35 s, 155 tables introspected. If a migration fails to replay, the report says which file
+and how far it got, and marks the review ungrounded rather than reporting it clean.
 
 ## With a real LLM (optional)
 

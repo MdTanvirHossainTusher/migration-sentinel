@@ -36,9 +36,29 @@ public class ReviewJobEntity extends BaseEntity {
     @Column(name = "migration_sql", columnDefinition = "text", nullable = false)
     private String migrationSql;
 
-    /** Prior migrations replayed into the sandbox before the candidate. Newline-separated file bodies. */
+    /** Prior migrations replayed into the sandbox before the candidate, flattened in Flyway version order. */
     @Column(name = "baseline_sql", columnDefinition = "text")
     private String baselineSql;
+
+    /** How many prior migration files the baseline was built from. */
+    @Column(name = "baseline_file_count")
+    private int baselineFileCount;
+
+    /** The ordered filenames behind {@link #baselineSql}, as a JSON array, for display. */
+    @Column(name = "baseline_files_json", columnDefinition = "text")
+    private String baselineFilesJson;
+
+    /**
+     * Why the sandbox produced no measurements, when it produced none — most often a prior
+     * migration that failed to replay. Distinct from {@link #errorMessage}, which means the
+     * review itself crashed.
+     */
+    @Column(name = "sandbox_note", columnDefinition = "text")
+    private String sandboxNote;
+
+    /** Schema the migrations build into (the project's Flyway {@code schemas}); null means public. */
+    @Column(name = "target_schema", length = 63)
+    private String targetSchema;
 
     /** Optional seed SQL (or {@code UPDATE pg_class ...} row-estimate stubs) applied after the baseline. */
     @Column(name = "seed_sql", columnDefinition = "text")

@@ -33,10 +33,24 @@ public class ReviewReportRenderer {
         long medium = count(sorted, Severity.MEDIUM);
         long low = count(sorted, Severity.LOW);
 
-        if (sorted.isEmpty()) {
-            md.append("**Verdict: safe to merge.** No production-safety defects found");
-            md.append(sandboxUsed ? " — the candidate applied cleanly in a sandbox with the seeded data.\n\n"
-                    : " from a structure-only review (no sandbox).\n\n");
+        SandboxRunResult.BaselineReplay baseline =
+                sandboxRun == null ? SandboxRunResult.BaselineReplay.none() : sandboxRun.baselineOrNone();
+
+        if (sorted.isEmpty() && sandboxUsed) {
+            md.append("**Verdict: safe to merge.** No production-safety defects found — the candidate ");
+            if (baseline.filesTotal() > 1) {
+                md.append("applied cleanly on top of ").append(baseline.filesTotal())
+                        .append(" prior migrations, with the seeded data.\n\n");
+            } else {
+                md.append("applied cleanly in a sandbox with the seeded data.\n\n");
+            }
+        } else if (sorted.isEmpty()) {
+            // "Safe to merge" is the one thing a structure-only pass has not earned the right
+            // to say: nothing ran, so an empty list means unchecked, not clean. Saying it
+            // anyway is precisely the false confidence this tool exists to remove.
+            md.append("**Verdict: not established.** Nothing was measured — no sandbox ran, so this is a "
+                    + "read of the SQL text alone. An empty findings list here means *unchecked*, "
+                    + "not *safe*.\n\n");
         } else if (high > 0) {
             md.append("**Verdict: do not merge as-is.** ")
                     .append(high).append(" high-severity issue(s)");
@@ -47,6 +61,22 @@ public class ReviewReportRenderer {
         } else {
             md.append("**Verdict: needs a decision.** ")
                     .append(medium).append(" medium and ").append(low).append(" low-severity issue(s), no blockers.\n\n");
+        }
+
+        if (baseline.failed()) {
+            // Loud, and above the findings: with the history only half applied the candidate
+            // was measured against a schema that exists nowhere, so nothing below is evidence.
+            md.append("> **The prior migrations did not finish replaying, so this review is not grounded.**\n>\n");
+            md.append("> ").append(baseline.describeFailure()).append("\n>\n");
+            if (baseline.failedStatement() != null) {
+                md.append("> Failing statement: `").append(baseline.failedStatement()).append("`\n>\n");
+            }
+            md.append("> Fix the history (a missing extension, a role, or a file the sandbox cannot run "
+                    + "unchanged) and re-run, or the row counts and lock modes below are absent rather "
+                    + "than reassuring.\n\n");
+        } else if (baseline.filesTotal() > 1) {
+            md.append("Replayed ").append(baseline.filesTotal()).append(" prior migration files (")
+                    .append(baseline.statementsApplied()).append(" statements) before the candidate.\n\n");
         }
 
         md.append("| # | Severity | Rule | Object | Verdict |\n|---|---|---|---|---|\n");
@@ -86,6 +116,9 @@ public class ReviewReportRenderer {
 
         if (sandboxUsed && sandboxRun != null) {
             md.append("---\n\n## Sandbox run\n\n");
+            md.append("- Prior migrations replayed: ").append(baseline.filesApplied()).append(" of ")
+                    .append(baseline.filesTotal()).append(" file(s), ")
+                    .append(baseline.statementsApplied()).append(" statement(s)\n");
             md.append("- Baseline applied: ").append(sandboxRun.baselineApplied()).append("\n");
             md.append("- Candidate applied: ").append(sandboxRun.candidateApplied())
                     .append(sandboxRun.timedOut() ? " (timed out)" : "").append("\n");

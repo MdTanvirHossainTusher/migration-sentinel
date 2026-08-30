@@ -10,7 +10,9 @@ import com.migrationsentinel.repository.EvaluationCaseResultRepository;
 import com.migrationsentinel.repository.EvaluationRunRepository;
 import com.migrationsentinel.repository.FindingRepository;
 import com.migrationsentinel.repository.ReviewJobRepository;
+import com.migrationsentinel.model.enums.ReviewMode;
 import com.migrationsentinel.service.ReviewRunner;
+import com.migrationsentinel.service.sandbox.SandboxManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -32,6 +34,7 @@ public class EvaluationRunner {
     private final EvaluationCorpus corpus;
     private final EvaluationScorer scorer;
     private final ReviewRunner reviewRunner;
+    private final SandboxManager sandboxManager;
 
     @Async("reviewExecutor")
     public void runAsync(UUID runId, List<String> caseIds) {
@@ -48,49 +51,55 @@ public class EvaluationRunner {
             long totalDuration = 0;
             int done = 0;
 
-            for (EvaluationCase testCase : cases) {
-                ReviewJobEntity job = new ReviewJobEntity();
-                job.setStatus(ReviewStatus.QUEUED);
-                job.setMode(run.getMode());
-                job.setLlmProvider(run.getLlmProvider());
-                job.setCaseId(testCase.id());
-                job.setMigrationFilename(testCase.id() + "/migration.sql");
-                job.setMigrationSql(testCase.migrationSql());
-                job.setBaselineSql(testCase.baselineSql());
-                job.setSeedSql(testCase.seedSql());
-                job.setEntitySource(testCase.entitySource());
-                job = reviewJobRepository.saveAndFlush(job);
+            // One container for the whole run, wiped between cases, instead of one per case.
+            // BASELINE_PROMPT never touches the sandbox, so it does not pay for a lease.
+            try (SandboxManager.Lease lease = run.getMode() == ReviewMode.BASELINE_PROMPT
+                    ? () -> { }
+                    : sandboxManager.leaseForEvaluation()) {
+                for (EvaluationCase testCase : cases) {
+                    ReviewJobEntity job = new ReviewJobEntity();
+                    job.setStatus(ReviewStatus.QUEUED);
+                    job.setMode(run.getMode());
+                    job.setLlmProvider(run.getLlmProvider());
+                    job.setCaseId(testCase.id());
+                    job.setMigrationFilename(testCase.id() + "/migration.sql");
+                    job.setMigrationSql(testCase.migrationSql());
+                    job.setBaselineSql(testCase.baselineSql());
+                    job.setSeedSql(testCase.seedSql());
+                    job.setEntitySource(testCase.entitySource());
+                    job = reviewJobRepository.saveAndFlush(job);
 
-                ReviewJobEntity completed = reviewRunner.runSync(job.getId());
-                List<FindingEntity> findings = findingRepository.findByReviewJobIdOrderByOrdinalAsc(job.getId());
-                CaseScore score = scorer.score(testCase, findings);
+                    ReviewJobEntity completed = reviewRunner.runSync(job.getId());
+                    List<FindingEntity> findings = findingRepository.findByReviewJobIdOrderByOrdinalAsc(job.getId());
+                    CaseScore score = scorer.score(testCase, findings);
 
-                EvaluationCaseResultEntity result = new EvaluationCaseResultEntity();
-                result.setEvaluationRun(run);
-                result.setCaseId(testCase.id());
-                result.setReviewJobId(job.getId());
-                result.setExpectedCount(score.expected());
-                result.setReportedCount(score.reported());
-                result.setTruePositives(score.truePositives());
-                result.setFalsePositives(score.falsePositives());
-                result.setFalseNegatives(score.falseNegatives());
-                result.setPassed(score.passed());
-                result.setNotes(score.notes());
-                caseResultRepository.save(result);
+                    EvaluationCaseResultEntity result = new EvaluationCaseResultEntity();
+                    result.setEvaluationRun(run);
+                    result.setCaseId(testCase.id());
+                    result.setReviewJobId(job.getId());
+                    result.setExpectedCount(score.expected());
+                    result.setReportedCount(score.reported());
+                    result.setTruePositives(score.truePositives());
+                    result.setFalsePositives(score.falsePositives());
+                    result.setFalseNegatives(score.falseNegatives());
+                    result.setPassed(score.passed());
+                    result.setNotes(score.notes());
+                    caseResultRepository.save(result);
 
-                tp += score.truePositives();
-                fp += score.falsePositives();
-                fn += score.falseNegatives();
-                if (completed != null && completed.getDurationMs() != null) {
-                    totalDuration += completed.getDurationMs();
+                    tp += score.truePositives();
+                    fp += score.falsePositives();
+                    fn += score.falseNegatives();
+                    if (completed != null && completed.getDurationMs() != null) {
+                        totalDuration += completed.getDurationMs();
+                    }
+                    done++;
+
+                    run.setCompletedCases(done);
+                    run.setTruePositives(tp);
+                    run.setFalsePositives(fp);
+                    run.setFalseNegatives(fn);
+                    evaluationRunRepository.saveAndFlush(run);
                 }
-                done++;
-
-                run.setCompletedCases(done);
-                run.setTruePositives(tp);
-                run.setFalsePositives(fp);
-                run.setFalseNegatives(fn);
-                evaluationRunRepository.saveAndFlush(run);
             }
 
             run.setPrecision(ratio(tp, tp + fp));
