@@ -8,6 +8,7 @@ import com.migrationsentinel.exception.LlmProviderException;
 import com.migrationsentinel.service.agent.ToolSpec;
 import com.migrationsentinel.service.support.AgentJsonMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -27,6 +28,7 @@ public class OpenAiLlmClient implements LlmClient {
     private final String apiKeyOverride;
     private final HttpClient http = HttpClient.newHttpClient();
 
+    @Autowired
     public OpenAiLlmClient(LlmProperties properties, AgentJsonMapper mapper) {
         this(properties, mapper, null);
     }

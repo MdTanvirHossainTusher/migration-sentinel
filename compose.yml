@@ -1,9 +1,12 @@
 # Migration Sentinel — one-command local stack.
+#   cp .env.example .env      # optional; sane dev defaults are baked in below
 #   docker compose up --build
+#
 # Then: frontend http://localhost:3000, API http://localhost:8080/swagger-ui.html
 #
-# The backend needs a Docker daemon for the Testcontainers sandbox, so the host's
-# Docker socket is mounted in. Everything else is self-contained.
+# Self-contained on purpose — Kafka, RustFS and a Docker-in-Docker engine for the
+# Testcontainers sandbox all run here, so `sandbox_used` is true out of the box and
+# a judge needs nothing but Docker.
 
 services:
   postgres:
@@ -23,16 +26,77 @@ services:
       timeout: 5s
       retries: 10
 
+  # The disposable-sandbox engine. Testcontainers inside the backend talks to THIS
+  # daemon, not the host's — which sidesteps the Docker Desktop npipe incompatibility
+  # that left every review "structure-only" when the host socket was mounted in.
+  dind:
+    image: docker:27-dind
+    container_name: sentinel-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    command: ["--host=tcp://0.0.0.0:2375", "--tls=false"]
+    volumes:
+      - sentinel_dind:/var/lib/docker
+    healthcheck:
+      test: ["CMD-SHELL", "docker info >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: sentinel-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: sentinel-rustfs
+    ports:
+      - "9000:9000"
+    environment:
+      RUSTFS_ROOT_USER: ${S3_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_ROOT_PASSWORD: ${S3_SECRET_KEY:-rustfsadmin}
+    volumes:
+      - sentinel_rustfs:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: sentinel-backend
-    # The image runs as an unprivileged user, but the mounted Docker socket is root-owned,
-    # so the Testcontainers sandbox can't reach the daemon without this. Local stack only.
-    user: root
     depends_on:
       postgres:
+        condition: service_healthy
+      dind:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      rustfs:
         condition: service_healthy
     environment:
       DB_HOST: postgres
@@ -41,45 +105,59 @@ services:
       DB_USERNAME: sentinel
       DB_PASSWORD: sentinel
       CORS_ALLOWED_ORIGIN: http://localhost:3000
+
+      # Agent brain — heuristic by default; drop a key in .env to use a real model.
       SENTINEL_LLM_PROVIDER: ${SENTINEL_LLM_PROVIDER:-heuristic}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
-      # Testcontainers inside the container talks to the host daemon via the mounted socket.
-      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
-      DOCKER_HOST: unix:///var/run/docker.sock
-      # docker-java defaults to API 1.32, which Docker Engine 25+ rejects with HTTP 400.
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+
+      # Sandbox → the dind engine, not the host.
+      DOCKER_HOST: tcp://dind:2375
+      TESTCONTAINERS_HOST_OVERRIDE: dind
+      TESTCONTAINERS_RYUK_DISABLED: "true"
       DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.44}
+
+      # Messaging → transactional outbox relayed to Kafka.
+      SENTINEL_MESSAGING_TRANSPORT: kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SENTINEL_JOB_POOL_SIZE: ${SENTINEL_JOB_POOL_SIZE:-2}
+
+      # Per-request LLM key encryption. Dev value; override in .env for anything real.
+      SENTINEL_CRYPTO_SECRET: ${SENTINEL_CRYPTO_SECRET:-ZGV2LW9ubHktMzJieXRlLXNlbnRpbmVsLWtleS0xMjM0NTY=}
+
+      # Object storage → RustFS. Credentials come from .env (defaults match the rustfs service).
+      SENTINEL_S3_ENABLED: "true"
+      SENTINEL_S3_ENDPOINT_INTERNAL: http://rustfs:9000
+      SENTINEL_S3_ENDPOINT_PUBLIC: ${S3_ENDPOINT_PUBLIC:-http://localhost:9000}
+      SENTINEL_S3_BUCKET: ${S3_BUCKET_NAME:-migration-sentinel}
+      SENTINEL_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
+      SENTINEL_S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      SENTINEL_S3_MAX_FILE_SIZE: ${SENTINEL_S3_MAX_FILE_SIZE:-10MB}
+      SENTINEL_MAX_UPLOAD_SIZE: ${SENTINEL_MAX_UPLOAD_SIZE:-25MB}
     ports:
       - "8080:8080"
       - "9091:9091"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9091/actuator/health | grep -q UP"]
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 40s
+      retries: 30
+      start_period: 60s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Next freezes the /proxy rewrite target at build time — must be the compose hostname.
         API_BASE_URL_INTERNAL: http://backend:8080
-        # Browser-side base (used only for the direct "API / Swagger" link).
         NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
     container_name: sentinel-frontend
     depends_on:
       backend:
         condition: service_healthy
     environment:
-      # Browser calls the API directly on the host; SSR calls it over the compose network.
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
       API_BASE_URL_INTERNAL: http://backend:8080
     ports:
@@ -87,3 +165,5 @@ services:
 
 volumes:
   sentinel_pg:
+  sentinel_dind:
+  sentinel_rustfs:
