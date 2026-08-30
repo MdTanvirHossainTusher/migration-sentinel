@@ -1,6 +1,7 @@
 package com.migrationsentinel.mapper;
 
 import com.migrationsentinel.model.entity.ApprovalRecordEntity;
+import com.migrationsentinel.model.entity.AuditEventEntity;
 import com.migrationsentinel.model.entity.EvaluationCaseResultEntity;
 import com.migrationsentinel.model.entity.EvaluationRunEntity;
 import com.migrationsentinel.model.entity.FindingEntity;
@@ -8,6 +9,7 @@ import com.migrationsentinel.model.entity.ReviewJobEntity;
 import com.migrationsentinel.model.entity.ToolCallEntity;
 import com.migrationsentinel.model.enums.Severity;
 import com.migrationsentinel.payload.response.ApprovalRecordResponse;
+import com.migrationsentinel.payload.response.AuditEventResponse;
 import com.migrationsentinel.payload.response.EvaluationCaseResultResponse;
 import com.migrationsentinel.payload.response.EvaluationRunResponse;
 import com.migrationsentinel.payload.response.FindingResponse;
@@ -74,6 +76,12 @@ public class DtoMapper {
         return new ApprovalRecordResponse(
                 a.getId(), a.getReviewJobId(), a.getFindingId(), a.getAction(), a.getApprovedBy(),
                 a.getTargetPath(), a.isApplied(), a.getNote(), a.getCreatedAt());
+    }
+
+    public AuditEventResponse toAuditEventResponse(AuditEventEntity a) {
+        return new AuditEventResponse(
+                a.getId(), a.getEventType(), a.getAggregateType(), a.getAggregateId(),
+                a.getActor(), a.getSummary(), a.getPayload(), a.getCreatedAt());
     }
 
     private long countSeverity(List<FindingEntity> findings, Severity severity) {

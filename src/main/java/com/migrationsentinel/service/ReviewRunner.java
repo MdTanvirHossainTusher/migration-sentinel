@@ -13,6 +13,7 @@ import com.migrationsentinel.repository.ToolCallRepository;
 import com.migrationsentinel.service.agent.MigrationReviewOrchestrator;
 import com.migrationsentinel.service.agent.RecordedToolCall;
 import com.migrationsentinel.service.agent.TrajectoryRecorder;
+import com.migrationsentinel.service.audit.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class ReviewRunner {
     private final FindingRepository findingRepository;
     private final ToolCallRepository toolCallRepository;
     private final MigrationReviewOrchestrator orchestrator;
+    private final AuditService auditService;
 
     /**
      * Executes one review to completion. Invoked on a worker thread (the local dispatcher's
@@ -82,7 +84,17 @@ public class ReviewRunner {
         job.setSandboxUsed(result.sandboxUsed());
         job.setSandboxNote(sandboxNote(result));
         job.setReportMarkdown(result.reportMarkdown());
-        return reviewJobRepository.saveAndFlush(job);
+        ReviewJobEntity saved = reviewJobRepository.saveAndFlush(job);
+
+        auditService.record("review.completed", "review", saved.getId().toString(), "system",
+                saved.getFindingsCount() + " finding(s), sandbox " + (saved.isSandboxUsed() ? "used" : "not used"),
+                java.util.Map.of(
+                        "findingsCount", saved.getFindingsCount(),
+                        "toolCallCount", saved.getToolCallCount(),
+                        "sandboxUsed", saved.isSandboxUsed(),
+                        "durationMs", durationMs,
+                        "provider", String.valueOf(saved.getLlmProvider())));
+        return saved;
     }
 
     /**
@@ -146,7 +158,10 @@ public class ReviewRunner {
         job.setStatus(ReviewStatus.FAILED);
         job.setFinishedAt(Instant.now());
         job.setErrorMessage(trim(message, 4000));
-        return reviewJobRepository.saveAndFlush(job);
+        ReviewJobEntity saved = reviewJobRepository.saveAndFlush(job);
+        auditService.record("review.failed", "review", saved.getId().toString(), "system",
+                trim(message, 480), java.util.Map.of("error", String.valueOf(message)));
+        return saved;
     }
 
     private String nullSafe(String s) {
