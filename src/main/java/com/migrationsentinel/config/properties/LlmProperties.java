@@ -30,7 +30,14 @@ public class LlmProperties {
     public static class Openai {
         private String apiKey = "";
         private String baseUrl = "https://api.openai.com/v1";
-        private String model = "gpt-4o-mini";
+        private String model = "gpt-5.6-luna";
+
+        /**
+         * {@code reasoning_effort} for the GPT-5 line. Chat Completions + function tools on a
+         * gpt-5.* model requires this to be {@code none}; it is only sent for models that
+         * accept it, so switching {@code model} back to gpt-4o-mini needs no change here.
+         */
+        private String reasoningEffort = "none";
     }
 
     @Getter
@@ -38,6 +45,6 @@ public class LlmProperties {
     public static class Gemini {
         private String apiKey = "";
         private String baseUrl = "https://generativelanguage.googleapis.com/v1beta";
-        private String model = "gemini-2.0-flash";
+        private String model = "gemini-flash-latest";
     }
 }

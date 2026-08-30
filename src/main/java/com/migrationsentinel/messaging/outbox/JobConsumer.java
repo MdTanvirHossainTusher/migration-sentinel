@@ -32,11 +32,13 @@ public class JobConsumer {
         executor.executeReview(jobId);
     }
 
-    @SuppressWarnings("unchecked")
     @KafkaListener(topics = JobMessages.TOPIC_EVALUATIONS, containerFactory = "kafkaListenerContainerFactory")
     public void onEvaluation(Map<String, Object> message) {
         UUID runId = UUID.fromString((String) message.get("runId"));
-        List<String> caseIds = (List<String>) message.getOrDefault("caseIds", List.of());
+        Object rawCaseIds = message.get("caseIds");
+        List<String> caseIds = rawCaseIds instanceof List<?> list
+                ? list.stream().map(String::valueOf).toList()
+                : List.of();
         log.info("consuming evaluation run {}", runId);
         executor.executeEvaluation(runId, caseIds);
     }

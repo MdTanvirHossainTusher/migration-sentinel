@@ -78,6 +78,23 @@ Every transport now triggers execution from **after** the commit:
 | --- | --- |
 | `outbox_event` | transactional outbox; `PENDING → (published) → deleted`, or `FAILED` after max retries |
 | `audit_event` | durable audit trail; written in the business transaction, optionally relayed on `migration-sentinel.audit` |
+
+### How audit events are captured
+
+- **API operations** carry `@Audited(action, aggregateType, id)` (`aspect/Audited.java`).
+  `AuditAspect` runs at `@Order(100)` — *inside* the `@Transactional` advice, which
+  `AuditConfig`'s `@EnableTransactionManagement(order = 0)` pins to the outside — so
+  `AuditService.record` (propagation `REQUIRED`) joins the business transaction and the
+  change and its event commit or roll back together. The aspect pulls the aggregate id and
+  a scalar payload off the return value by reflection, and the actor from the `X-Actor`
+  header (or an `approvedBy` field). Annotated today: `review.submitted`,
+  `evaluation.submitted`, `rewrite.applied`, `artifact.confirmed`.
+- **Terminal states of async work** (`review.completed` / `.failed`,
+  `evaluation.completed` / `.failed`) are recorded by an explicit `AuditService.record`
+  call in the runner — they are domain state transitions on a worker thread, not "an API
+  call returned", so an aspect on a method boundary is the wrong tool.
+- Mirrors the identity service's `AuditAspect` + `@AuditEvent`, trimmed to this domain
+  (no auth principal, no entity before/after snapshots).
 | `artifact` | object-storage artifacts (`REVIEW_REPORT`, `USER_UPLOAD`); `PENDING → CONFIRMED` for uploads |
 | `review_job.llm_api_key_encrypted`, `evaluation_run.llm_api_key_encrypted` | AES-GCM ciphertext of a per-request key; decrypted only by the worker, just before the LLM call |
 | `review_job.report_artifact_id` | link to the stored `report.md` |

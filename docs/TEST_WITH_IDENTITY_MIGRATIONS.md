@@ -86,5 +86,11 @@ curl -s -L localhost:8080/api/v1/reviews/$ID/report.md -o report.md
 
 ## Cost (with `openai`)
 
-`gpt-4o-mini`: roughly $0.01–0.03 per review depending on how many tools the analyzer calls.
-The full 15-case evaluation with `provider=openai` is roughly $0.20.
+Default model is `gpt-5.6-luna` ($0.20 / $1.20 per 1M input / output tokens) — a small
+current-gen model, which is the point: the sandbox does the measuring, so a frontier model
+adds little. Roughly **$0.005 per review** depending on how many tool rounds the analyzer
+runs; the full 15-case evaluation is **$0.10–0.25**. Set `OPENAI_MODEL` in `.env` to override
+(e.g. `gpt-5-mini` for a bit more reasoning headroom on the multi-issue case).
+
+Gemini / OpenAI free-tier keys are rate-limited (~5 req/min); a single review survives it
+(the client retries with backoff) but the 15-case evaluation needs a paid key.

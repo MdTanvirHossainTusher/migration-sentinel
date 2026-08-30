@@ -108,6 +108,59 @@ Run the whole evaluation from the CLI:
 
 Full setup, commands, versions, runtime and cost: [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md).
 
+## Reviewer walkthrough — a real service's migrations, end to end
+
+This is what a reviewer should do to see the whole thing work on a real repo (here, an
+identity/auth service: ~220 migrations, schema `identity`, needs `pgcrypto` + `pg_trgm`).
+
+**0 · Keys (optional).** The offline `heuristic` brain needs none. For a real model:
+Gemini — <https://aistudio.google.com/apikey> (free, key starts `AIza…`); OpenAI —
+<https://platform.openai.com/api-keys> (key starts `sk-…`). You paste the key per-review in
+the UI; it does not go in a file. Defaults: `GEMINI_MODEL=gemini-flash-latest`,
+`OPENAI_MODEL=gpt-5.6-luna` (small current-gen models — the sandbox does the measuring).
+A single review works on a free-tier key (the client retries the rate limit); the 15-case
+evaluation needs a **paid** key.
+
+**1 · Stack up.** `docker compose up --build`, then optionally pre-pull the sandbox image so
+the first review is fast: `docker compose exec dind docker pull postgres:16-alpine`.
+
+**2 · Open** <http://localhost:3000> (hard-refresh to clear cached JS).
+
+**3 · Load the folder.** *1 · Load your migration folder* → **Choose folder…** → the
+service's `src/main/resources/db/migration/`. Every `.sql` is read in the browser and ordered
+by Flyway version. For a first run, click **review** on an early file (e.g. `V50__…`) so only
+~49 files replay (~10 s) rather than all ~220 (~35 s).
+
+**4 · Schema.** *2 · Where the migrations build* → **Database schema** → `identity` (the
+service's `spring.flyway.schemas`; the page usually detects and offers it). Leave seed blank.
+
+**5 · Model + key.** *4 · Run it* → Depth `Full review`, Reviewing brain `gemini` or
+`openai`, paste your key into the field that appears. The key is AES-GCM encrypted on the job
+row, never returned by the API, and stripped from logs and the audit trail.
+
+**6 · Run.** The review page polls itself. Behind it: a disposable Postgres starts in the
+bundled dind engine → schema `identity` + extensions → prior migrations replay in version
+order → the candidate runs one statement at a time (timing + locks) → the model reasons over
+that evidence → a separate verifier re-checks each finding against the sandbox and drops the
+unproven ones.
+
+**7 · Read it.** KPI row shows `sandbox: yes` (it measured a real DB). The **report** tab has
+the verdict + an evidence block per finding; the **trajectory** tab is the full agent trace;
+**↓ download report.md** pulls the report straight from object storage via a presigned URL.
+If a migration can't replay, the report names the file and marks the review *ungrounded* —
+untick that file and re-run.
+
+**8 · Verify the engineering.**
+
+```bash
+curl -s localhost:8080/api/v1/audit-events | jq '.data[] | {event_type, summary}'   # audit trail, no key in it
+docker compose logs backend | grep -i "consuming review job"                        # the Kafka job path
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' localhost:8080/api/v1/reviews/$ID/report.md  # 302 → presigned URL
+```
+
+API form of the same flow, and the cost breakdown:
+[docs/TEST_WITH_IDENTITY_MIGRATIONS.md](docs/TEST_WITH_IDENTITY_MIGRATIONS.md).
+
 ## Reviewing against the whole history
 
 The candidate runs on production, and production is every migration that came before it — so
@@ -149,6 +202,110 @@ The agent runs DDL. It never touches a real database:
 
 Details: [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md) · system design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Platform, patterns & tools
+
+The agent is the point; the platform around it is built so a team could actually run it.
+Everything below is off by default — `sentinel.messaging.transport=local` and
+`sentinel.s3.enabled=false` keep `./gradlew test` and `bootRun` free of Kafka and S3 —
+`docker compose up` turns it all on.
+
+### Messaging & job dispatch
+
+- **Transactional outbox** — `outbox_event` (`V3`). A submission writes the job row *and* the
+  outbox row in one transaction; they commit or roll back together.
+- **Kafka transport** — `OutboxPublishService` relays rows to `migration-sentinel.reviews` /
+  `.evaluations` / `.audit`; `JobConsumer` (`@KafkaListener`, consumer group, concurrency 2)
+  executes them. All Kafka beans are hand-built in `config/KafkaConfig`; Boot's
+  `KafkaAutoConfiguration` is excluded so `local` mode has zero broker code.
+- **Hybrid relay** — an `@TransactionalEventListener(AFTER_COMMIT)` immediate publish for
+  latency **plus** a `@Scheduled(fixedDelay = 5s)` sweep as the recovery net (broker down,
+  pod crash). `GET /actuator/scheduledtasks` shows the sweep registered.
+- **`SELECT … FOR UPDATE SKIP LOCKED`** lease so parallel relay pods take disjoint slices.
+- **After-commit dispatch** everywhere — the executor never starts before the submitting
+  transaction is durable (this fixed a race where evaluations stuck `QUEUED`).
+- **Idempotent consumers** — runners no-op on an already-terminal job (at-least-once).
+
+### Audit
+
+- `audit_event` (`V4`), browsable at `GET /api/v1/audit-events`.
+- **Declarative** — `@Audited(action, aggregateType, id)` + `AuditAspect` (`@Around`,
+  `@Order(100)`), pinned *inside* the `@Transactional` advice by
+  `@EnableTransactionManagement(order = 0)` so the event joins the business transaction.
+  On `review.submitted`, `evaluation.submitted`, `rewrite.applied`, `artifact.confirmed`.
+- **Explicit** for async terminal states — `review.completed` / `.failed`,
+  `evaluation.completed` / `.failed` — recorded by the runner on the worker thread.
+- Under Kafka, also relayed on `migration-sentinel.audit`.
+
+### Secrets & redaction
+
+- `SecretMasker` + a masking Logback appender strip anything credential-shaped (`sk-…`,
+  `AIza…`, bearer tokens, `key=value` secrets, JDBC passwords; extra patterns from
+  `redaction.xml`) from the console, audit payloads and persisted trajectories.
+- A **per-request LLM API key** is AES-GCM encrypted at rest (`CryptoService`), decrypted
+  only by the worker, never in a response, log or audit payload.
+
+### Object storage
+
+- Presigned upload / download against **RustFS** (any S3 API) via AWS SDK for Java v2 — two
+  endpoints (internal for the service, public for the URLs it signs). `report.md` is stored
+  server-side on completion and handed out as a short-lived presigned URL; the backend never
+  proxies file bytes. `POST /artifacts/uploads` → `/confirm` for user uploads, with a
+  configurable size cap.
+
+### Tools
+
+| Area | Used |
+| --- | --- |
+| Runtime | Java 21 · Spring Boot 3.4 · Gradle |
+| Persistence | PostgreSQL · Flyway · JPA/Hibernate |
+| Sandbox | Testcontainers Postgres, against a bundled `docker:dind` engine in compose |
+| Messaging | Apache Kafka 4 (KRaft) · Spring for Apache Kafka |
+| Object storage | RustFS · `software.amazon.awssdk:s3` (client + presigner) |
+| AOP | `spring-boot-starter-aop` (AspectJ) for `@Audited` |
+| Crypto | JDK `javax.crypto` AES-GCM |
+| API | Spring MVC · `ApiResponse<T>` envelope · springdoc/Swagger · actuator + Prometheus |
+| Frontend | Next.js 15 |
+| LLM | offline `heuristic` · OpenAI (`gpt-5.6-luna`) · Gemini (`gemini-flash-latest`) — raw HTTP, no SDK, with 429/503 backoff |
+| CI/CD | GitHub Actions (unit / sandbox / evaluation / frontend) · Release Please |
+
+### Patterns
+
+Transactional outbox · hybrid relay (immediate + scheduled sweep) · `SKIP LOCKED` work-queue
+lease · after-commit event dispatch · strategy (`JobSubmissionGateway`, `LlmClient`) · AOP
+interception ordered inside the tx advisor · decorator (`MaskingLoggingEventWrapper`) ·
+analyzer/verifier multi-agent split with an explicit agent loop · idempotent at-least-once
+consumers · feature-flagged conditional beans · unified response envelope + global exception
+handler · presigned direct-to-storage · retry-with-backoff honouring provider rate-limit hints.
+
+Full request flow and where it scales: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## CI/CD & releases
+
+GitHub Actions, three workflows in [`.github/workflows/`](.github/workflows/):
+
+**`ci.yml`** — on every PR and push to `main`, four jobs run in parallel (and skip
+`release-please--*` branches; in-progress PR runs are cancelled on a new push):
+
+| Job | Command | What it guards |
+| --- | --- | --- |
+| `backend` | `./gradlew test` | fast unit tests, no Docker |
+| `sandbox` | `./gradlew sandboxTest` | Testcontainers integration tests — the sandbox lifecycle, introspection, replay, the URL guard (ubuntu-latest ships a Docker daemon) |
+| `evaluation` | `./gradlew evaluationTest` | runs the 15-case corpus through the baseline and the full agent and **asserts the agent wins** — recall and F1 up, false positives down, no stage regresses. A change that breaks the improvement fails here. 45-min timeout. |
+| `frontend` | `npm run build` | Next.js production build + type-check |
+
+**`pr-title.yml`** — rejects any PR whose title is not a Conventional Commit
+(`feat:` / `fix:` / `docs:` / …), so release automation stays deterministic.
+
+**`release-please.yml`** — on push to `main`, [`googleapis/release-please-action@v5`](https://github.com/googleapis/release-please)
+(`release-type: simple`) reads the conventional commits since the last release, opens/updates
+a **release PR** that bumps the `// x-release-please-version` line in `build.gradle` and
+regenerates `CHANGELOG.md` grouped by type (Features / Bug Fixes / Performance / …). Merging
+that PR tags the release. Config in [`release-please-config.json`](release-please-config.json)
++ [`.release-please-manifest.json`](.release-please-manifest.json).
+
+`CHANGELOG.md` is the machine-generated release log; the hand-written story of how the agent
+got good is [`docs/CHANGELOG_IMPROVEMENT.md`](docs/CHANGELOG_IMPROVEMENT.md).
+
 ## Prior work
 
 | Component | Origin |
@@ -172,16 +329,20 @@ code from them is copied here. No prior personal or employer code is in this sub
 src/main/java/com/migrationsentinel/
   service/agent/     agent loop, toolbox, orchestrator, prompts (resources/prompts/)
   service/sandbox/   Testcontainers lifecycle, introspection, replay, lock analysis, JPA validate
-  service/llm/       heuristic (offline) + OpenAI + Gemini clients
+  service/llm/       heuristic (offline) + OpenAI (gpt-5 line) + Gemini (3.x) clients, 429 backoff
   service/rules/     DDL parser, rule catalogue, deterministic scanner
   service/eval/      corpus loader, scorer, evaluation runner
-  service/audit/     audit-event trail
+  service/audit/     audit-event trail (audit_event + optional Kafka relay)
+  aspect/            @Audited + AuditAspect — declarative audit inside the tx advice
   service/artifact/  presigned object storage for report.md + uploads
+  service/support/   AgentJsonMapper, CryptoService (AES-GCM for per-request keys)
   messaging/         job submission gateway; local (AFTER_COMMIT) + outbox→Kafka transports
   util/              SecretMasker + masking log appender
+src/main/resources/prompts/      analyzer / verifier / baseline agent instructions
 src/main/resources/eval/cases/   the 15 evaluation cases
 frontend/            Next.js 15 review + evaluation UI
 docs/                changelog, reproduction guide, evaluation, architecture, safety model
+docs/traces/         committed agent trajectories
 ```
 
 ## Documentation
@@ -194,9 +355,20 @@ docs/                changelog, reproduction guide, evaluation, architecture, sa
 - [docs/TEST_WITH_IDENTITY_MIGRATIONS.md](docs/TEST_WITH_IDENTITY_MIGRATIONS.md) — reviewing a real service's migration folder
 - [docs/EVALUATION.md](docs/EVALUATION.md) — the metric, the rubric, the results table
 - [docs/AGENT_TRAJECTORIES.md](docs/AGENT_TRAJECTORIES.md) — annotated agent runs
+- [docs/traces/](docs/traces/) — committed full traces (heuristic + `gpt-5.6-luna`), ready to read
 - [docs/SAFETY_MODEL.md](docs/SAFETY_MODEL.md) — how consequential actions are contained
 - [docs/HOT_TAKE.md](docs/HOT_TAKE.md) — the failure mode and what it taught us
 - [docs/CHECKPOINT.md](docs/CHECKPOINT.md) — build state and what is / isn't done
+
+## Submission
+
+| Deliverable | Where |
+| --- | --- |
+| **Source code + improvement changelog** | this repo · [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md) (stages 0 → 7) |
+| **Reproduction guide** | [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md) — clean machine → `docker compose up --build` → the result |
+| **Agent traces** | [docs/traces/](docs/traces/) — committed full trajectories (every tool call + verbatim tool result) for a heuristic run and a `gpt-5.6-luna` run; agent instructions are [`src/main/resources/prompts/`](src/main/resources/prompts/); every review also serves its own trace at `GET /api/v1/reviews/{id}/report` → `trajectory` and in the UI's **trajectory** tab |
+| **Solution video** | *(recorded separately)* |
+| **Self-assessment vs rubric** | [docs/HACKATHON_EVALUATION.md](docs/HACKATHON_EVALUATION.md) |
 
 ## License
 

@@ -19,3 +19,7 @@ npm-debug.log*
 /rewrites/
 *.log
 *.tsbuildinfo
+
+# stray downloaded report artifacts from manual testing
+report-*.md
+req.json

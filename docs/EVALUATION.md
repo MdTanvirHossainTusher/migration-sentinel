@@ -92,7 +92,7 @@ ANALYZER_VERIFIER_SPLIT       1.00   1.00   1.00       0.00     15/15
 | False positives / case | 0.20 | 0.00 | −0.20 |
 | Cases passed | 12 / 15 | 15 / 15 | +3 |
 | Human time / case | ~4 min eye-scan, misses data-scale issues | ~0 (read the report) | — |
-| Cost / case | ~$0 (one short prompt) | ~$0 offline; ~$0.01–0.03 with `provider=openai` | — |
+| Cost / case | ~$0 (one short prompt) | ~$0 offline; ~$0.005 with `provider=openai` (`gpt-5.6-luna`) | — |
 
 Per-stage breakdown and the story of each jump: [CHANGELOG_IMPROVEMENT.md](CHANGELOG_IMPROVEMENT.md).
 
@@ -123,5 +123,6 @@ SENTINEL_LLM_PROVIDER=openai ./gradlew bootRun --args='--spring.profiles.active=
 
 The LLM adds natural-language nuance and catches phrasing the regex scanner misses; the
 verifier is what keeps its precision at parity with the deterministic brain. Approximate
-runtime: 15 cases × (one container + 3–6 model calls) ≈ 6–10 minutes, ≈ $0.20 total on
-`gpt-4o-mini`.
+runtime: 15 cases × (one container + 3–6 model calls) ≈ 6–10 minutes, ≈ $0.10–0.25 total on
+`gpt-5.6-luna` (the default; a small current-gen model — the tools do the measuring, so a
+frontier model buys little here). Needs a paid key: 15 cases on a free-tier rate limit fails.

@@ -1,5 +1,6 @@
 package com.migrationsentinel.service.eval;
 
+import com.migrationsentinel.aspect.Audited;
 import com.migrationsentinel.exception.ResourceNotFoundException;
 import com.migrationsentinel.mapper.DtoMapper;
 import com.migrationsentinel.messaging.JobSubmissionGateway;
@@ -34,6 +35,7 @@ public class EvaluationService {
     private final DtoMapper mapper;
 
     @Transactional
+    @Audited(action = "evaluation.submitted", aggregateType = "evaluation")
     public EvaluationRunResponse submit(RunEvaluationRequest request) {
         EvaluationRunEntity run = new EvaluationRunEntity();
         run.setStatus(EvaluationStatus.QUEUED);

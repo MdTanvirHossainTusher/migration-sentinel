@@ -28,6 +28,7 @@ Agentic reviewer for Flyway migrations. `com.migrationsentinel`.
 | `service/rules/` | `DdlParser`, `RuleCatalog`, `StaticRuleScanner` (deterministic) |
 | `service/eval/` | corpus loader, scorer, evaluation runner |
 | `service/audit/` | `AuditService` — audit_event row + optional Kafka relay, same transaction |
+| `aspect/` | `@Audited` + `AuditAspect` — API operations audited declaratively, inside the tx advice (`AuditConfig` = `@EnableTransactionManagement(order=0)`); async terminal states use an explicit `AuditService.record` |
 | `service/artifact/` | `ArtifactStorageService` — presigned S3 upload/confirm, server-side report storage |
 | `service/support/` | `AgentJsonMapper` (camelCase), `CryptoService` (AES-GCM for per-request keys) |
 | `messaging/` | `JobSubmissionGateway` — `local/` (AFTER_COMMIT event) and `outbox/` (outbox→Kafka) transports; `JobExecutionService` is the shared execution entry point |

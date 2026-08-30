@@ -8,9 +8,9 @@ import com.migrationsentinel.model.entity.ApprovalRecordEntity;
 import com.migrationsentinel.model.entity.FindingEntity;
 import com.migrationsentinel.payload.request.ApplyRewriteRequest;
 import com.migrationsentinel.payload.response.ApprovalRecordResponse;
+import com.migrationsentinel.aspect.Audited;
 import com.migrationsentinel.repository.ApprovalRecordRepository;
 import com.migrationsentinel.repository.FindingRepository;
-import com.migrationsentinel.service.audit.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,10 +37,10 @@ public class RewriteApplyService {
     private final FindingRepository findingRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
     private final SentinelProperties properties;
-    private final AuditService auditService;
     private final DtoMapper mapper;
 
     @Transactional
+    @Audited(action = "rewrite.applied", aggregateType = "review", id = "reviewJobId")
     public ApprovalRecordResponse apply(ApplyRewriteRequest request) {
         if (!properties.isRewriteApplyEnabled()) {
             throw new BadResourceRequestException(
@@ -87,15 +87,6 @@ public class RewriteApplyService {
             record.setNote((request.note() == null ? "" : request.note() + " | ") + "write failed: " + ex.getMessage());
         }
         ApprovalRecordEntity persisted = approvalRecordRepository.save(record);
-        auditService.record("rewrite.applied", "review", finding.getReviewJob().getId().toString(),
-                request.approvedBy(),
-                "Rewrite for finding " + finding.getRuleCode() + " written to " + target.getFileName(),
-                java.util.Map.of(
-                        "findingId", finding.getId().toString(),
-                        "ruleCode", String.valueOf(finding.getRuleCode()),
-                        "approvedBy", request.approvedBy(),
-                        "targetPath", target.toString(),
-                        "applied", persisted.isApplied()));
         return mapper.toApprovalResponse(persisted);
     }
 

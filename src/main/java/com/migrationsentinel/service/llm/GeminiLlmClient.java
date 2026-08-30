@@ -107,10 +107,9 @@ public class GeminiLlmClient implements LlmClient {
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                     .build();
 
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = LlmHttp.sendWithBackoff(http, request, "Gemini");
             if (response.statusCode() / 100 != 2) {
-                throw new LlmProviderException("Gemini returned HTTP " + response.statusCode() + ": "
-                        + truncate(response.body()));
+                throw new LlmProviderException(providerError("Gemini", response.statusCode(), response.body()));
             }
             JsonNode parts = mapper.readTree(response.body())
                     .path("candidates").path(0).path("content").path("parts");
@@ -119,9 +118,13 @@ public class GeminiLlmClient implements LlmClient {
             for (JsonNode part : parts) {
                 if (part.has("functionCall")) {
                     JsonNode fc = part.get("functionCall");
+                    // Gemini 3+ attaches an opaque thoughtSignature to each function-call part
+                    // and rejects the next turn if it is not echoed back verbatim.
+                    String signature = part.path("thoughtSignature").asText(null);
                     calls.add(new LlmToolCall("gemini_" + UUID.randomUUID(),
                             fc.path("name").asText(),
-                            fc.path("args").toString()));
+                            fc.path("args").toString(),
+                            signature));
                 } else if (part.has("text")) {
                     text.append(part.get("text").asText());
                 }
@@ -165,6 +168,9 @@ public class GeminiLlmClient implements LlmClient {
                             call.set("args", mapper.createObjectNode());
                         }
                         fc.set("functionCall", call);
+                        if (tc.thoughtSignature() != null && !tc.thoughtSignature().isBlank()) {
+                            fc.put("thoughtSignature", tc.thoughtSignature());
+                        }
                         parts.add(fc);
                     }
                 }
@@ -186,6 +192,25 @@ public class GeminiLlmClient implements LlmClient {
             arr.add(content);
         }
         return arr;
+    }
+
+    /**
+     * Turn a provider error body into one readable sentence. Both OpenAI and Gemini wrap the
+     * useful text in {@code {"error":{"message": "...", "status": "..."}}}; pull that out so
+     * the UI shows "This model is no longer available…" instead of a page of JSON.
+     */
+    private String providerError(String provider, int status, String body) {
+        try {
+            JsonNode error = mapper.readTree(body).path("error");
+            String message = error.path("message").asText("");
+            if (!message.isBlank()) {
+                String code = error.path("status").asText(String.valueOf(status));
+                return provider + " API error (" + code + "): " + message;
+            }
+        } catch (Exception ignored) {
+            // fall through to the raw body
+        }
+        return provider + " returned HTTP " + status + ": " + truncate(body);
     }
 
     private String truncate(String s) {

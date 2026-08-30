@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, Finding, ReviewReport } from "@/lib/api";
 import { CodeBlock } from "@/lib/CodeBlock";
+import { ErrorBox } from "@/lib/ErrorBox";
 
 export default function ReviewDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -29,7 +30,7 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
     };
   }, [id]);
 
-  if (error) return <p className="err">{error}</p>;
+  if (error) return <ErrorBox error={error} />;
   if (!report) return <p className="muted">Loading…</p>;
 
   const r = report.review;
@@ -72,7 +73,7 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
       </div>
 
       {running && <p className="muted">Agent is working… this page refreshes itself.</p>}
-      {r.error_message && <pre className="err">{r.error_message}</pre>}
+      {r.error_message && <ErrorBox error={r.error_message} as="pre" />}
 
       {r.sandbox_note && (
         <div className="notice bad">

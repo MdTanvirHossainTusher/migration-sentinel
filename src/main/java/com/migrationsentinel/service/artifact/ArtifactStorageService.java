@@ -1,5 +1,6 @@
 package com.migrationsentinel.service.artifact;
 
+import com.migrationsentinel.aspect.Audited;
 import com.migrationsentinel.config.properties.S3Properties;
 import com.migrationsentinel.exception.BadResourceRequestException;
 import com.migrationsentinel.exception.ResourceNotFoundException;
@@ -7,7 +8,6 @@ import com.migrationsentinel.model.entity.ArtifactEntity;
 import com.migrationsentinel.model.enums.ArtifactKind;
 import com.migrationsentinel.model.enums.ArtifactStatus;
 import com.migrationsentinel.repository.ArtifactRepository;
-import com.migrationsentinel.service.audit.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -44,7 +44,6 @@ public class ArtifactStorageService {
     private final S3Presigner presigner;
     private final ArtifactRepository repository;
     private final S3Properties properties;
-    private final AuditService auditService;
 
     public record PresignedUpload(UUID artifactId, String objectKey, String uploadUrl,
                                   Instant expiresAt, long maxBytes) {
@@ -93,6 +92,7 @@ public class ArtifactStorageService {
     }
 
     @Transactional
+    @Audited(action = "artifact.confirmed", aggregateType = "artifact", id = "artifactId")
     public ArtifactView confirm(UUID artifactId, String actor) {
         ArtifactEntity artifact = repository.findById(artifactId)
                 .orElseThrow(() -> new ResourceNotFoundException("Artifact " + artifactId + " not found"));
@@ -121,13 +121,7 @@ public class ArtifactStorageService {
 
         artifact.setSizeBytes(head.contentLength());
         artifact.setStatus(ArtifactStatus.CONFIRMED);
-        ArtifactEntity saved = repository.save(artifact);
-
-        auditService.record("artifact.confirmed", "artifact", saved.getId().toString(), actor,
-                "Upload confirmed: " + saved.getFilename() + " (" + saved.getSizeBytes() + " bytes)",
-                java.util.Map.of("objectKey", saved.getObjectKey(), "sizeBytes",
-                        String.valueOf(saved.getSizeBytes())));
-        return view(saved);
+        return view(repository.save(artifact));
     }
 
     @Transactional(readOnly = true)

@@ -7,6 +7,7 @@ import { detectSchemas, formatBytes } from "@/lib/flyway";
 import { EXAMPLE_HISTORY, EXAMPLE_SEED } from "@/lib/example";
 import { LoadedFile, useMigrationFiles } from "@/lib/useMigrationFiles";
 import { parseMigrationName, countStatements } from "@/lib/flyway";
+import { ErrorBox } from "@/lib/ErrorBox";
 
 const MODES: { value: ReviewMode; label: string; hint: string }[] = [
   { value: "ANALYZER_VERIFIER_SPLIT", label: "Full review (recommended)", hint: "Analyzer proposes, a separate verifier drops anything the sandbox does not back up." },
@@ -235,7 +236,7 @@ export default function ReviewPage() {
         {!candidate && history.files.length > 0 && (
           <p className="err">Every file is excluded — include at least one to review.</p>
         )}
-        {error && <p className="err">{error}</p>}
+        {error && <ErrorBox error={error} />}
 
         {showAdvanced && (
           <ManualEntry

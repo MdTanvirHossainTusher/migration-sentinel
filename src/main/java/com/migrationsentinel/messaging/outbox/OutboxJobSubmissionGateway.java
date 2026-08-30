@@ -30,6 +30,7 @@ public class OutboxJobSubmissionGateway implements JobSubmissionGateway {
     @Override
     public void submitEvaluation(UUID runId, List<String> caseIds) {
         recorder.record(JobMessages.TOPIC_EVALUATIONS, "evaluation", runId.toString(),
-                "evaluation.submitted", Map.of("runId", runId.toString(), "caseIds", caseIds));
+                "evaluation.submitted",
+                Map.of("runId", runId.toString(), "caseIds", caseIds == null ? List.of() : caseIds));
     }
 }

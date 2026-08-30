@@ -65,10 +65,12 @@ The one path that writes to disk is the **"Apply to file"** button, and it:
 
 ## 4a. Everything consequential is audited, and secrets are redacted
 
-- **`audit_event`** — `review.submitted` / `.completed` / `.failed`, `evaluation.completed`,
-  `rewrite.applied`, `artifact.confirmed` are each written in the same transaction as the
-  change, and (under the kafka transport) relayed on `migration-sentinel.audit`. Browse it
-  at `GET /api/v1/audit-events`.
+- **`audit_event`** — `review.submitted` / `.completed` / `.failed`,
+  `evaluation.submitted` / `.completed` / `.failed`, `rewrite.applied`, `artifact.confirmed`
+  are each written in the same transaction as the change (API operations via an `@Audited`
+  aspect ordered inside the transaction advice; async terminal states via an explicit call
+  in the runner), and under the kafka transport relayed on `migration-sentinel.audit`.
+  Browse it at `GET /api/v1/audit-events`.
 - **A per-request LLM API key** is AES-GCM encrypted
   ([`CryptoService`](../src/main/java/com/migrationsentinel/service/support/CryptoService.java))
   before it is stored on the job row, decrypted only by the worker immediately before the
