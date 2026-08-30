@@ -4,7 +4,9 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Migration Sentinel",
-  description: "Agentic Flyway migration safety reviewer",
+  description:
+    "Replays your whole Flyway migration history into a throwaway Postgres, runs the candidate against "
+    + "production-sized tables, and reports what it measured.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="top">
           <div className="wrap">
             <h1>▚ MIGRATION SENTINEL</h1>
+            <span className="tagline">migration safety, measured — not guessed</span>
             <nav>
               <Link href="/">Review</Link>
               <Link href="/evaluations">Evaluation</Link>

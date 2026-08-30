@@ -5,6 +5,7 @@ import com.migrationsentinel.model.entity.ReviewJobEntity;
 import com.migrationsentinel.model.entity.ToolCallEntity;
 import com.migrationsentinel.model.enums.ReviewStatus;
 import com.migrationsentinel.payload.dto.MigrationInput;
+import com.migrationsentinel.payload.dto.SandboxRunResult;
 import com.migrationsentinel.payload.dto.VerifiedFinding;
 import com.migrationsentinel.repository.FindingRepository;
 import com.migrationsentinel.repository.ReviewJobRepository;
@@ -64,6 +65,7 @@ public class ReviewRunner {
 
         MigrationInput input = new MigrationInput(
                 job.getMigrationFilename(), job.getMigrationSql(), job.getBaselineSql(),
+                MigrationHistory.split(job.getBaselineSql()), job.getTargetSchema(),
                 job.getSeedSql(), job.getEntitySource(), job.getMode(), job.getLlmProvider(), job.getCaseId());
 
         TrajectoryRecorder recorder = new TrajectoryRecorder();
@@ -80,8 +82,28 @@ public class ReviewRunner {
         job.setFindingsCount(result.findings().size());
         job.setToolCallCount(recorder.count());
         job.setSandboxUsed(result.sandboxUsed());
+        job.setSandboxNote(sandboxNote(result));
         job.setReportMarkdown(result.reportMarkdown());
         return reviewJobRepository.saveAndFlush(job);
+    }
+
+    /**
+     * Why the sandbox produced nothing, when it produced nothing. A review that silently
+     * degrades to structure-only reads as "clean" — the reason has to travel with it.
+     */
+    private String sandboxNote(MigrationReviewOrchestrator.Result result) {
+        SandboxRunResult run = result.sandboxRun();
+        if (run == null) {
+            return null;
+        }
+        SandboxRunResult.BaselineReplay baseline = run.baselineOrNone();
+        if (baseline.failed()) {
+            return baseline.describeFailure();
+        }
+        if (!result.sandboxUsed() && run.failureMessage() != null) {
+            return run.failureMessage();
+        }
+        return null;
     }
 
     private void persistFindings(ReviewJobEntity job, List<VerifiedFinding> findings) {

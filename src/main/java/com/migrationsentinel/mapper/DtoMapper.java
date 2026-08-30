@@ -35,6 +35,8 @@ public class DtoMapper {
                 job.getFindingsCount(),
                 job.getToolCallCount(),
                 job.isSandboxUsed(),
+                job.getSandboxNote(),
+                job.getBaselineFileCount(),
                 (int) countSeverity(findings, Severity.HIGH),
                 (int) countSeverity(findings, Severity.MEDIUM),
                 (int) countSeverity(findings, Severity.LOW),

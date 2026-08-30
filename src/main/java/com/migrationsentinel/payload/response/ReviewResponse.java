@@ -20,6 +20,10 @@ public record ReviewResponse(
         int findingsCount,
         int toolCallCount,
         boolean sandboxUsed,
+        /** Why the sandbox produced no measurements, when it produced none. */
+        String sandboxNote,
+        /** How many prior migration files were replayed before the candidate. */
+        int baselineFileCount,
         int highCount,
         int mediumCount,
         int lowCount,

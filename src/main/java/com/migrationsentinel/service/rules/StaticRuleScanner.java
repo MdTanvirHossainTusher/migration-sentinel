@@ -48,7 +48,6 @@ public class StaticRuleScanner {
     public List<ProposedFinding> scan(String candidateSql, SchemaFacts facts, SchemaDriftReport drift, boolean singleTxn) {
         List<ParsedStatement> statements = ddlParser.parse(candidateSql);
         List<ProposedFinding> findings = new ArrayList<>();
-        List<String> fkColumnsAdded = new ArrayList<>();
 
         for (ParsedStatement st : statements) {
             switch (st.kind()) {
@@ -77,7 +76,6 @@ public class StaticRuleScanner {
                     }
                 }
                 case ADD_FOREIGN_KEY -> {
-                    fkColumnsAdded.addAll(st.columns());
                     if (!st.notValid()) {
                         findings.add(constraintValidationLock(st, "FOREIGN KEY"));
                     }
@@ -102,17 +100,11 @@ public class StaticRuleScanner {
         // A new FK column (added via ADD COLUMN ... REFERENCES or a separate ADD CONSTRAINT)
         // with no covering index once the whole migration set is applied.
         for (ParsedStatement st : statements) {
-            if (st.kind() == ParsedStatement.Kind.ADD_COLUMN
-                    && st.normalized().toLowerCase(Locale.ROOT).contains("references")) {
-                fkColumnsAdded.addAll(st.columns());
-            }
-        }
-        for (ParsedStatement st : statements) {
             if (st.kind() != ParsedStatement.Kind.ADD_FOREIGN_KEY && !inlineFk(st)) {
                 continue;
             }
             for (String col : st.columns()) {
-                if (facts.sandboxRan() && facts.columnCoveredByIndex(st.table(), col)) {
+                if (facts.measured(st.table()) && facts.columnCoveredByIndex(st.table(), col)) {
                     continue;
                 }
                 boolean indexInSameSet = statements.stream().anyMatch(other ->
@@ -166,16 +158,14 @@ public class StaticRuleScanner {
     private ProposedFinding setNotNull(ParsedStatement st, SchemaFacts facts, String candidateSql) {
         RuleCatalog.Rule r = RuleCatalog.get(RuleCode.NOT_NULL_WITHOUT_SAFE_BACKFILL);
         long rows = facts.rowEstimate(st.table());
-        boolean hasNotValidCheck = candidateSql.toLowerCase(Locale.ROOT)
-                .matches("(?s).*check\\s*\\(\\s*" + java.util.regex.Pattern.quote(first(st.columns()))
-                        + "\\s+is\\s+not\\s+null\\s*\\)\\s+not\\s+valid.*");
-        if (rows == 0 && facts.sandboxRan()) {
+        String column = first(st.columns());
+        if (rows == 0 && facts.measured(st.table())) {
             // Verified empty in the sandbox: SET NOT NULL is instant and safe here.
             return null;
         }
-        if (hasNotValidCheck) {
+        if (usesNotValidCheckPattern(candidateSql, column)) {
             // The engineer used the safe pattern: CHECK (col IS NOT NULL) NOT VALID means
-            // SET NOT NULL reuses the validated constraint and skips the full scan.
+            // SET NOT NULL reuses the already-validated constraint and skips the full scan.
             return null;
         }
         Severity sev;
@@ -195,20 +185,32 @@ public class StaticRuleScanner {
             sev = Severity.MEDIUM;
             ev = "sandbox: " + st.table() + " holds " + rows + " rows; scan time scales linearly with table size.";
         }
-        if (hasNotValidCheck) {
-            sev = Severity.LOW;
-            ev += " A CHECK (... IS NOT NULL) NOT VALID is present, which lets SET NOT NULL skip the scan.";
-        }
         return new ProposedFinding(RuleCode.NOT_NULL_WITHOUT_SAFE_BACKFILL, sev,
-                "SET NOT NULL on " + st.table() + "." + first(st.columns()),
-                st.table() + "." + first(st.columns()), r.why(), ev,
-                "ALTER TABLE " + st.table() + " ADD CONSTRAINT " + st.table() + "_" + first(st.columns())
-                        + "_nn CHECK (" + first(st.columns()) + " IS NOT NULL) NOT VALID;\n"
+                "SET NOT NULL on " + st.table() + "." + column,
+                st.table() + "." + column, r.why(), ev,
+                "ALTER TABLE " + st.table() + " ADD CONSTRAINT " + st.table() + "_" + column
+                        + "_nn CHECK (" + column + " IS NOT NULL) NOT VALID;\n"
                         + "-- backfill in batches --\n"
                         + "ALTER TABLE " + st.table() + " VALIDATE CONSTRAINT " + st.table() + "_"
-                        + first(st.columns()) + "_nn;\n"
-                        + "ALTER TABLE " + st.table() + " ALTER COLUMN " + first(st.columns()) + " SET NOT NULL;",
-                hasNotValidCheck ? 0.5 : 0.85);
+                        + column + "_nn;\n"
+                        + "ALTER TABLE " + st.table() + " ALTER COLUMN " + column + " SET NOT NULL;",
+                0.85);
+    }
+
+    /**
+     * Does the migration already establish {@code CHECK (col IS NOT NULL) NOT VALID}? When it
+     * does, SET NOT NULL reuses that constraint instead of scanning the table.
+     */
+    private boolean usesNotValidCheckPattern(String candidateSql, String column) {
+        if (candidateSql == null || "?".equals(column)) {
+            return false;
+        }
+        return java.util.regex.Pattern
+                .compile("check\\s*\\(\\s*" + java.util.regex.Pattern.quote(column)
+                        + "\\s+is\\s+not\\s+null\\s*\\)\\s+not\\s+valid",
+                        java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL)
+                .matcher(candidateSql)
+                .find();
     }
 
     private ProposedFinding volatileDefault(ParsedStatement st, SchemaFacts facts) {
@@ -259,7 +261,7 @@ public class StaticRuleScanner {
 
     private ProposedFinding unindexedFk(ParsedStatement st, String col, SchemaFacts facts) {
         RuleCatalog.Rule r = RuleCatalog.get(RuleCode.UNINDEXED_FOREIGN_KEY);
-        String ev = facts.sandboxRan()
+        String ev = facts.measured(st.table())
                 ? "sandbox: after the full migration, " + st.table() + "." + col + " has no index whose leading column is "
                 + col + " (checked via pg_index)"
                 : "no CREATE INDEX on " + st.table() + "(" + col + ") anywhere in the migration set";

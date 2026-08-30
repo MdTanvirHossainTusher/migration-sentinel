@@ -39,8 +39,10 @@ reviewer can't see.
 Migration Sentinel gives the reviewing agent **real tools instead of just the SQL**:
 
 1. It spins up a disposable Postgres in a container (Testcontainers).
-2. It replays the repo's prior migrations, then a seed that puts the affected tables at
-   production scale.
+2. It replays **the repo's whole prior migration history** — every file in your
+   `db/migration` folder, in Flyway version order — then a seed that puts the affected tables
+   at production scale. Drop the folder on the page and the newest file becomes the candidate;
+   everything before it becomes the baseline.
 3. It runs the candidate migration **one statement at a time**, timing each one and
    capturing the locks it takes.
 4. It introspects the result: `pg_class` row estimates, `pg_index`, foreign keys, `EXPLAIN`.
@@ -89,7 +91,8 @@ is in [docs/CHANGELOG_IMPROVEMENT.md](docs/CHANGELOG_IMPROVEMENT.md).
 docker compose up --build
 ```
 
-Then open <http://localhost:3000>, click **Load example**, **Run review**.
+Then open <http://localhost:3000> and drop your `src/main/resources/db/migration` folder on
+the page — or click **Load example** to see the whole flow first.
 
 Run the whole evaluation from the CLI:
 
@@ -98,6 +101,28 @@ Run the whole evaluation from the CLI:
 ```
 
 Full setup, commands, versions, runtime and cost: [docs/REPRODUCTION_GUIDE.md](docs/REPRODUCTION_GUIDE.md).
+
+## Reviewing against the whole history
+
+The candidate runs on production, and production is every migration that came before it — so
+that is what it is reviewed against, not one hand-picked predecessor.
+
+- **Ordering is Flyway's, not the filesystem's.** Sorted as text, `V10` lands before `V2`; a
+  project past nine migrations would be replayed into a schema that never existed. Versions are
+  compared numerically, and repeatable (`R__`) migrations go last. Undo (`U__`) files are
+  skipped — Flyway never applies them going forward.
+- **Failures name the file.** With 400 migrations in play, "relation already exists" is not a
+  diagnosis. The replay is per file, so a report says which migration stopped it and how far it
+  got, and the review is marked ungrounded rather than passing silently.
+- **Your own schema is created first.** Set the schema your project's
+  `spring.flyway.schemas` names (the UI detects it from the SQL). Flyway creates it at boot,
+  so the migrations never mention it — without it the replay dies at the first qualified name.
+  Introspection then spans every schema the migrations built, not just `public`.
+- **Skip what the sandbox cannot run.** Untick any migration that needs an extension, a role,
+  or data only production has.
+
+Measured on `kc-mis-identity`: 220 migration files across 11 schemas, 1,538 statements,
+replayed in ~33 s.
 
 ## Safety model
 

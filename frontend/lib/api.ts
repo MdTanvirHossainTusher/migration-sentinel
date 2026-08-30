@@ -45,6 +45,10 @@ export type Review = {
   findings_count: number;
   tool_call_count: number;
   sandbox_used: boolean;
+  /** Why the sandbox produced no measurements, when it produced none. */
+  sandbox_note?: string;
+  /** How many prior migration files were replayed before the candidate. */
+  baseline_file_count: number;
   high_count: number;
   medium_count: number;
   low_count: number;
@@ -165,7 +169,11 @@ export const api = {
   submitReview: (payload: {
     filename?: string;
     migrationSql: string;
+    /** The project's prior migrations, one entry per file. The server orders them. */
+    baselineMigrations?: { filename: string; sql: string }[];
     baselineSql?: string;
+    /** The project's Flyway `schemas` — created in the sandbox before the replay. */
+    targetSchema?: string;
     seedSql?: string;
     entitySource?: string;
     mode: ReviewMode;
@@ -176,7 +184,9 @@ export const api = {
       body: JSON.stringify({
         filename: payload.filename || undefined,
         migration_sql: payload.migrationSql,
+        baseline_migrations: payload.baselineMigrations?.length ? payload.baselineMigrations : undefined,
         baseline_sql: payload.baselineSql || undefined,
+        target_schema: payload.targetSchema || undefined,
         seed_sql: payload.seedSql || undefined,
         entity_source: payload.entitySource || undefined,
         mode: payload.mode,
