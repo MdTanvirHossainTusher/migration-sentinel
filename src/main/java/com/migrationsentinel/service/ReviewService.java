@@ -8,10 +8,10 @@ import com.migrationsentinel.model.entity.FindingEntity;
 import com.migrationsentinel.model.entity.ReviewJobEntity;
 import com.migrationsentinel.model.entity.ToolCallEntity;
 import com.migrationsentinel.model.enums.ReviewStatus;
+import com.migrationsentinel.aspect.Audited;
 import com.migrationsentinel.mapper.DtoMapper;
 import com.migrationsentinel.messaging.JobSubmissionGateway;
 import com.migrationsentinel.service.artifact.ArtifactStorageService;
-import com.migrationsentinel.service.audit.AuditService;
 import com.migrationsentinel.service.support.CryptoService;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.Pagination;
@@ -40,13 +40,13 @@ public class ReviewService {
     private final FindingRepository findingRepository;
     private final ToolCallRepository toolCallRepository;
     private final JobSubmissionGateway jobGateway;
-    private final AuditService auditService;
     private final CryptoService cryptoService;
     private final ObjectProvider<ArtifactStorageService> artifactStorage;
     private final DtoMapper mapper;
     private final ObjectMapper objectMapper;
 
     @Transactional
+    @Audited(action = "review.submitted", aggregateType = "review")
     public ReviewResponse submit(CreateReviewRequest request) {
         List<MigrationFile> history = MigrationHistory.ordered(request.baselineMigrations());
         long historyChars = MigrationHistory.totalLength(history);
@@ -76,12 +76,6 @@ public class ReviewService {
         job.setLlmApiKeyEncrypted(cryptoService.encrypt(request.llmApiKey()));
         job = reviewJobRepository.saveAndFlush(job);
 
-        auditService.record("review.submitted", "review", job.getId().toString(), "api",
-                "Review queued for " + (job.getMigrationFilename() == null ? "pasted SQL" : job.getMigrationFilename()),
-                java.util.Map.of(
-                        "mode", job.getMode().name(),
-                        "provider", job.getLlmProvider(),
-                        "baselineFileCount", job.getBaselineFileCount()));
         jobGateway.submitReview(job.getId());
         return mapper.toReviewResponse(job, List.of());
     }

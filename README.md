@@ -228,7 +228,8 @@ src/main/java/com/migrationsentinel/
   service/llm/       heuristic (offline) + OpenAI (gpt-5 line) + Gemini (3.x) clients, 429 backoff
   service/rules/     DDL parser, rule catalogue, deterministic scanner
   service/eval/      corpus loader, scorer, evaluation runner
-  service/audit/     audit-event trail
+  service/audit/     audit-event trail (audit_event + optional Kafka relay)
+  aspect/            @Audited + AuditAspect — declarative audit inside the tx advice
   service/artifact/  presigned object storage for report.md + uploads
   service/support/   AgentJsonMapper, CryptoService (AES-GCM for per-request keys)
   messaging/         job submission gateway; local (AFTER_COMMIT) + outbox→Kafka transports

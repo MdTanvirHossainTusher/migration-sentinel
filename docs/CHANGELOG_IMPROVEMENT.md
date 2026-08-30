@@ -188,7 +188,7 @@ actually deploy and a judge can reproduce":
 | Transport | in-process only | outbox relayed to Kafka (immediate AFTER_COMMIT publish + scheduled sweep), consumed by a worker pool that scales with replicas |
 | Sandbox in compose | host socket mount → `sandbox_used: false` always | bundled `docker:dind` engine; `sandbox_used: true` out of the box |
 | Real-model keys | server env var only | optional per-request key, AES-GCM encrypted at rest, never returned, stripped from logs and audit |
-| Audit | one narrow `approval_record` table | `audit_event` trail for submit / complete / fail / rewrite / artifact, same-transaction, relayed on `migration-sentinel.audit` |
+| Audit | one narrow `approval_record` table | `audit_event` trail for submit / complete / fail / rewrite / artifact — API operations via an `@Audited` aspect ordered inside the transaction advice, async terminal states via an explicit call; same-transaction, relayed on `migration-sentinel.audit` |
 | Secrets in output | logged verbatim | `MaskingConsoleAppender` + `SecretMasker` over console, audit payloads and persisted trajectories |
 | Report delivery | inline string in a JSON response | rendered `report.md` stored in object storage (RustFS), handed out as a presigned download URL; `POST /artifacts/uploads` + `/confirm` for user uploads with a configurable size cap |
 
