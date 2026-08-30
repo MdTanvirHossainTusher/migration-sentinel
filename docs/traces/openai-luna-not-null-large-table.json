@@ -1,0 +1,229 @@
+{
+  "captured_from": "GET /api/v1/reviews/b097a2a0-52ba-469d-879e-cf28e5c196c1/report",
+  "review": {
+    "mode": "ANALYZER_VERIFIER_SPLIT",
+    "provider": "openai",
+    "status": "COMPLETED",
+    "sandbox_used": true,
+    "tool_call_count": 5,
+    "findings_count": 1,
+    "duration_ms": 17358
+  },
+  "input": {
+    "filename": "V12__invoices_region_not_null.sql",
+    "note": "ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL; baseline creates invoices; seed stubs it to 5,000,000 rows"
+  },
+  "agent_instructions": {
+    "analyzer": "src/main/resources/prompts/analyzer.md",
+    "verifier": "src/main/resources/prompts/verifier.md"
+  },
+  "trajectory": [
+    {
+      "step": 1,
+      "agent": "ANALYZER",
+      "tool": "run_candidate_migration",
+      "ok": true,
+      "duration_ms": 122,
+      "arguments": {},
+      "tool_result": {
+        "baselineApplied": true,
+        "candidateApplied": true,
+        "candidateDurationMs": 11,
+        "statements": [
+          {
+            "index": 0,
+            "sql": "ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL",
+            "ok": true,
+            "durationMs": 1,
+            "strongestLock": "ACCESS EXCLUSIVE"
+          }
+        ],
+        "locks": [],
+        "tableStatsAfter": [
+          {
+            "table": "invoices",
+            "estimatedRows": 5000000,
+            "sizeBytes": 180224,
+            "columns": [
+              {
+                "name": "id",
+                "type": "bigint",
+                "nullable": false,
+                "defaultExpr": "nextval('invoices_id_seq'::regclass)"
+              },
+              {
+                "name": "tax_region",
+                "type": "character varying",
+                "nullable": false
+              }
+            ],
+            "indexes": [
+              {
+                "name": "invoices_pkey",
+                "columns": [
+                  "id"
+                ],
+                "unique": true,
+                "primary": true
+              }
+            ],
+            "foreignKeys": []
+          }
+        ],
+        "timedOut": false,
+        "schemaObserved": true,
+        "baseline": {
+          "filesTotal": 1,
+          "filesApplied": 1,
+          "statementsApplied": 1
+        }
+      }
+    },
+    {
+      "step": 2,
+      "agent": "ANALYZER",
+      "tool": "static_scan",
+      "ok": true,
+      "duration_ms": 10,
+      "arguments": {},
+      "tool_result": [
+        {
+          "ruleCode": "NOT_NULL_WITHOUT_SAFE_BACKFILL",
+          "severity": "HIGH",
+          "title": "SET NOT NULL on invoices.tax_region",
+          "targetObject": "invoices.tax_region",
+          "summary": "ALTER TABLE ... ALTER COLUMN ... SET NOT NULL must verify every existing row. It holds ACCESS EXCLUSIVE for the duration of that scan, blocking reads and writes. Instant on an empty table, an outage on a 50M-row one.",
+          "evidence": "sandbox: invoices holds 5000000 rows (>= 1000000 threshold). SET NOT NULL scans all of them under ACCESS EXCLUSIVE.",
+          "suggestedRewrite": "ALTER TABLE invoices ADD CONSTRAINT invoices_tax_region_nn CHECK (tax_region IS NOT NULL) NOT VALID;\n-- backfill in batches --\nALTER TABLE invoices VALIDATE CONSTRAINT invoices_tax_region_nn;\nALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL;",
+          "confidence": 0.85
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "agent": "ANALYZER",
+      "tool": "describe_table",
+      "ok": true,
+      "duration_ms": 52,
+      "arguments": {
+        "table": "invoices"
+      },
+      "tool_result": {
+        "table": "invoices",
+        "estimatedRows": 5000000,
+        "sizeBytes": 180224,
+        "columns": [
+          {
+            "name": "id",
+            "type": "bigint",
+            "nullable": false,
+            "defaultExpr": "nextval('invoices_id_seq'::regclass)"
+          },
+          {
+            "name": "tax_region",
+            "type": "character varying",
+            "nullable": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "invoices_pkey",
+            "columns": [
+              "id"
+            ],
+            "unique": true,
+            "primary": true
+          }
+        ],
+        "foreignKeys": []
+      }
+    },
+    {
+      "step": 4,
+      "agent": "ANALYZER",
+      "tool": "estimate_rows",
+      "ok": true,
+      "duration_ms": 30,
+      "arguments": {
+        "table": "invoices"
+      },
+      "tool_result": {
+        "estimated_rows": 5000000,
+        "table": "invoices",
+        "exact_rows": 2000
+      }
+    },
+    {
+      "step": 5,
+      "agent": "VERIFIER",
+      "tool": "run_candidate_migration",
+      "ok": true,
+      "duration_ms": 0,
+      "arguments": {},
+      "tool_result": {
+        "baselineApplied": true,
+        "candidateApplied": true,
+        "candidateDurationMs": 11,
+        "statements": [
+          {
+            "index": 0,
+            "sql": "ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL",
+            "ok": true,
+            "durationMs": 1,
+            "strongestLock": "ACCESS EXCLUSIVE"
+          }
+        ],
+        "locks": [],
+        "tableStatsAfter": [
+          {
+            "table": "invoices",
+            "estimatedRows": 5000000,
+            "sizeBytes": 180224,
+            "columns": [
+              {
+                "name": "id",
+                "type": "bigint",
+                "nullable": false,
+                "defaultExpr": "nextval('invoices_id_seq'::regclass)"
+              },
+              {
+                "name": "tax_region",
+                "type": "character varying",
+                "nullable": false
+              }
+            ],
+            "indexes": [
+              {
+                "name": "invoices_pkey",
+                "columns": [
+                  "id"
+                ],
+                "unique": true,
+                "primary": true
+              }
+            ],
+            "foreignKeys": []
+          }
+        ],
+        "timedOut": false,
+        "schemaObserved": true,
+        "baseline": {
+          "filesTotal": 1,
+          "filesApplied": 1,
+          "statementsApplied": 1
+        }
+      }
+    }
+  ],
+  "findings": [
+    {
+      "rule_code": "NOT_NULL_WITHOUT_SAFE_BACKFILL",
+      "severity": "HIGH",
+      "verdict": "CONFIRMED",
+      "title": "SET NOT NULL on invoices.tax_region requires a large-table validation lock",
+      "evidence": "run_candidate_migration: statement 0 ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL completed in 1 ms with strongestLock ACCESS EXCLUSIVE; resulting estimatedRows=5000000. estimate_rows: estimated_rows=5000000, exact_rows=2000. static_scan: SET NOT NULL scans all 5000000 rows under ACCESS EXCLUSIVE.",
+      "suggested_rewrite": "ALTER TABLE invoices ADD CONSTRAINT invoices_tax_region_nn CHECK (tax_region IS NOT NULL) NOT VALID;\n-- Backfill any NULL values in batches, if needed.\nALTER TABLE invoices VALIDATE CONSTRAINT invoices_tax_region_nn;\nALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL;\nALTER TABLE invoices DROP CONSTRAINT invoices_tax_region_nn;"
+    }
+  ],
+  "report_markdown": "# Migration review: V12__invoices_region_not_null.sql\n\n**Verdict: do not merge as-is.** 1 high-severity issue(s).\n\n| # | Severity | Rule | Object | Verdict |\n|---|---|---|---|---|\n| 1 | HIGH | `NOT_NULL_WITHOUT_SAFE_BACKFILL` | `invoices.tax_region` | CONFIRMED |\n\n## 1. SET NOT NULL on invoices.tax_region requires a large-table validation lock\n\n- **Severity:** HIGH  |  **Rule:** `NOT_NULL_WITHOUT_SAFE_BACKFILL`  |  **Verifier:** CONFIRMED\n\nThe migration verifies every existing row while holding ACCESS EXCLUSIVE, blocking reads and writes for the duration of the scan. The sandbox contains only 2,000 rows, but its planner estimate is 5,000,000, so the laptop timing is not representative of production.\n\n**Evidence**\n\n```\nrun_candidate_migration: statement 0 ALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL completed in 1 ms with strongestLock ACCESS EXCLUSIVE; resulting estimatedRows=5000000. estimate_rows: estimated_rows=5000000, exact_rows=2000. static_scan: SET NOT NULL scans all 5000000 rows under ACCESS EXCLUSIVE.\n```\n\n**Verifier note:** run_candidate_migration confirms SET NOT NULL completed with ACCESS EXCLUSIVE; resulting estimatedRows=5000000. The migration therefore applies a strong table lock on a table with a 5,000,000-row planner estimate, despite exact sandbox rows being 2,000.\n\n**Suggested rewrite** (copy into the migration yourself — Sentinel does not edit files)\n\n```sql\nALTER TABLE invoices ADD CONSTRAINT invoices_tax_region_nn CHECK (tax_region IS NOT NULL) NOT VALID;\n-- Backfill any NULL values in batches, if needed.\nALTER TABLE invoices VALIDATE CONSTRAINT invoices_tax_region_nn;\nALTER TABLE invoices ALTER COLUMN tax_region SET NOT NULL;\nALTER TABLE invoices DROP CONSTRAINT invoices_tax_region_nn;\n```\n\n---\n\n## Sandbox run\n\n- Prior migrations replayed: 1 of 1 file(s), 1 statement(s)\n- Baseline applied: true\n- Candidate applied: true\n- Candidate wall time: 11 ms\n\n| stmt | ok | ms | strongest lock |\n|---|---|---|---|\n| 0 | yes | 1 | ACCESS EXCLUSIVE |\n\n---\n\n_Generated by Migration Sentinel. DDL ran only in a disposable container; no user database was reachable. See SAFETY_MODEL.md._\n"
+}

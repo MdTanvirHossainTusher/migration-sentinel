@@ -27,9 +27,9 @@ Migration Sentinel against the judging rubric. Every claim points at something i
 
 | Deliverable | File |
 | --- | --- |
-| Solution code + improvement changelog | this repo + [CHANGELOG_IMPROVEMENT](CHANGELOG_IMPROVEMENT.md) |
+| Solution code + improvement changelog | this repo + [CHANGELOG_IMPROVEMENT](CHANGELOG_IMPROVEMENT.md) (stages 0 → 7) |
 | Reproduction guide | [REPRODUCTION_GUIDE](REPRODUCTION_GUIDE.md) |
-| Agent trajectories | [AGENT_TRAJECTORIES](AGENT_TRAJECTORIES.md); every review persists its own under `GET /reviews/{id}/report` → `trajectory` |
+| Agent traces | [traces/](traces/) — committed full trajectories (heuristic + `gpt-5.6-luna`), + [AGENT_TRAJECTORIES](AGENT_TRAJECTORIES.md); agent instructions in [`prompts/`](../src/main/resources/prompts/); every review also serves its own at `GET /reviews/{id}/report` → `trajectory` |
 | Solution video | *(recorded separately)* |
 
 ## What a judge should do

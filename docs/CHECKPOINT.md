@@ -67,11 +67,11 @@ The `EvaluationHarnessTest` run produced exactly the numbers now in `EVALUATION.
 the board, 12/15 → 15/15 cases passed.
 
 ## Known gaps / next steps
-- `SandboxProperties.reuseWithinEvaluation` is declared but not yet wired — the evaluation
-  starts one container per case. Reusing one per run would cut evaluation time ~3×.
-- OpenAI/Gemini clients are untested against the live APIs (no key in this environment).
-  The request/response shapes follow the current public schemas.
-- Frontend has no automated tests beyond `next build`.
+- OpenAI (`gpt-5.6-luna`) and Gemini clients are now verified against the live APIs — a
+  real `SET NOT NULL` review catches it HIGH/CONFIRMED (trace:
+  `docs/traces/openai-luna-not-null-large-table.json`). Free-tier keys are rate-limited;
+  single reviews retry through it, the 15-case eval needs a paid key.
+- Frontend has no automated tests beyond `next build` + `tsc`.
 
 ## How to resume
 

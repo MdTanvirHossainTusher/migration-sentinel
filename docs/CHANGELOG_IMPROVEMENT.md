@@ -29,6 +29,7 @@ corpus could not see those gaps is the most useful thing in this document.
 | 4 · + analyzer/verifier split | A dedicated verifier agent with its own prompt and tools, so the analyzer never grades itself | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 5 · + whole migration history | Reviews against every prior migration in the repo, in Flyway order, in the schema they build | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 6 · + productionization | Outbox→Kafka job queue, audit-event trail, log/audit redaction, per-request encrypted API keys, presigned report artifacts, bundled sandbox engine | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
+| 7 · + real-model hardening | Gemini-3 thought signatures, provider-error flattening, 429 retry/backoff, gpt-5 `reasoning_effort`, eval + cases fixes | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 
 ---
 
@@ -209,6 +210,32 @@ $ curl -XPOST .../api/v1/reviews -d '{...,"provider":"openai","llm_api_key":"sk-
 evaluation harness are unchanged. `docker compose up` turns everything on. Lesson: a
 reproducibility score is decided by the second person's first run — an agent that is right
 in a test they cannot start scores nothing.
+
+## Stage 7 — hardening from running real models
+
+The offline `heuristic` brain is the graded baseline (deterministic, reproducible with no
+key). But wiring `provider=openai` / `provider=gemini` to real APIs surfaced a run of
+integration failures the heuristic path could never hit. None of these move the corpus F1;
+all of them are the difference between "the agent works with a real model" and "it 400s".
+
+| What broke | Why | Fix |
+| --- | --- | --- |
+| Gemini 3 rejected every turn after the first tool call | Gemini 3 attaches an opaque `thoughtSignature` to each function-call part and refuses the follow-up if it is not echoed back | capture it per part on the response, re-emit it on the next `functionCall` |
+| The UI showed a wall of raw JSON on any provider error | the client surfaced `HTTP 400: {…300 chars…}` verbatim | unwrap `error.message` from the provider envelope → "Gemini API error (404): This model is no longer available…"; frontend `ErrorBox` puts any structured extra in a collapsible "details" |
+| Every evaluation case after the first failed | `gemini-3.6-flash` / OpenAI free tier = ~5 requests/minute; one eval ≈ 60–100 calls, so case 2 onward hit `RESOURCE_EXHAUSTED` and scored as "caught nothing" | `LlmHttp.sendWithBackoff` retries 429/503, honouring the "retry in Ns" hint (cap 65 s, 4 attempts). A single review now survives a free key; the eval still needs a paid one |
+| `gpt-5.6-luna` 400'd on the first call | the GPT-5 line rejects function tools on `/v1/chat/completions` unless `reasoning_effort=none`, and rejects `temperature != 1` | detect `gpt-5*` models: send `reasoning_effort=none`, omit `temperature` |
+| `POST /evaluations` 500'd from the UI | `Map.of("caseIds", null)` NPE when no case subset was given (the kafka transport path) | null-safe the outbox payload and the consumer |
+| the corpus "Expected" column was blank in the UI | `Map.of("ruleCode", …)` — Jackson's snake_case strategy renames bean properties, not map keys, so the API sent `ruleCode` and the frontend read `rule_code` | return a real `EvaluationCaseSummary` record |
+
+**Model defaults.** `OPENAI_MODEL=gpt-5.6-luna`, `GEMINI_MODEL=gemini-flash-latest` — small
+current-gen models on purpose: the sandbox does the measuring, so a frontier model buys
+little here (a `gpt-5.6-luna` review of `SET NOT NULL` on a 5M-row table catches it HIGH,
+CONFIRMED — trace: [`docs/traces/openai-luna-not-null-large-table.json`](traces/openai-luna-not-null-large-table.json)).
+
+**Lesson.** A deterministic offline brain is what makes the evaluation reproducible, but it
+also hides every real-API contract — auth shapes, rate limits, model-family quirks, error
+envelopes. "It passes with the heuristic" and "a judge can run it with their own key" are
+two different claims; the second one needs its own testing pass.
 
 ---
 
