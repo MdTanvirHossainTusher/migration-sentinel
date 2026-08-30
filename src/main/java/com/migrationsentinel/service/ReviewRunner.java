@@ -13,10 +13,12 @@ import com.migrationsentinel.repository.ToolCallRepository;
 import com.migrationsentinel.service.agent.MigrationReviewOrchestrator;
 import com.migrationsentinel.service.agent.RecordedToolCall;
 import com.migrationsentinel.service.agent.TrajectoryRecorder;
+import com.migrationsentinel.service.artifact.ArtifactStorageService;
 import com.migrationsentinel.service.audit.AuditService;
 import com.migrationsentinel.service.support.CryptoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -38,6 +40,7 @@ public class ReviewRunner {
     private final MigrationReviewOrchestrator orchestrator;
     private final AuditService auditService;
     private final CryptoService cryptoService;
+    private final ObjectProvider<ArtifactStorageService> artifactStorage;
 
     /**
      * Executes one review to completion. Invoked on a worker thread (the local dispatcher's
@@ -87,6 +90,17 @@ public class ReviewRunner {
         job.setSandboxUsed(result.sandboxUsed());
         job.setSandboxNote(sandboxNote(result));
         job.setReportMarkdown(result.reportMarkdown());
+
+        ArtifactStorageService storage = artifactStorage.getIfAvailable();
+        if (storage != null && result.reportMarkdown() != null && !result.reportMarkdown().isBlank()) {
+            try {
+                job.setReportArtifactId(storage.storeReport(
+                        job.getId(), "report-" + job.getId() + ".md", result.reportMarkdown()).getId());
+            } catch (RuntimeException ex) {
+                log.warn("could not store report artifact for review {}: {}", job.getId(), ex.getMessage());
+            }
+        }
+
         ReviewJobEntity saved = reviewJobRepository.saveAndFlush(job);
 
         auditService.record("review.completed", "review", saved.getId().toString(), "system",

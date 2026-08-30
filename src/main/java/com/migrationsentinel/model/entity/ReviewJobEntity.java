@@ -81,6 +81,10 @@ public class ReviewJobEntity extends BaseEntity {
     @Column(name = "report_markdown", columnDefinition = "text")
     private String reportMarkdown;
 
+    /** Object-storage artifact holding the rendered report.md, when S3 storage is enabled. */
+    @Column(name = "report_artifact_id")
+    private java.util.UUID reportArtifactId;
+
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 

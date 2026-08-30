@@ -83,6 +83,8 @@ export type ToolCall = {
 export type ReviewReport = {
   review: Review;
   report_markdown?: string;
+  /** Presigned URL to download report.md when object storage is enabled. */
+  report_download_url?: string;
   findings: Finding[];
   trajectory: ToolCall[];
 };
