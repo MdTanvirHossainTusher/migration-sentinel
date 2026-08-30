@@ -83,6 +83,8 @@ export type ToolCall = {
 export type ReviewReport = {
   review: Review;
   report_markdown?: string;
+  /** Presigned URL to download report.md when object storage is enabled. */
+  report_download_url?: string;
   findings: Finding[];
   trajectory: ToolCall[];
 };
@@ -178,6 +180,8 @@ export const api = {
     entitySource?: string;
     mode: ReviewMode;
     provider: string;
+    /** Optional per-request API key; used for this review only, never stored client-side. */
+    llmApiKey?: string;
   }) =>
     call<Review>("/reviews", {
       method: "POST",
@@ -191,6 +195,7 @@ export const api = {
         entity_source: payload.entitySource || undefined,
         mode: payload.mode,
         provider: payload.provider,
+        llm_api_key: payload.llmApiKey || undefined,
       }),
     }).then((r) => r.data),
 
@@ -216,13 +221,19 @@ export const api = {
       }),
     }),
 
-  runEvaluation: (payload: { mode: ReviewMode; provider: string; corpusLabel?: string }) =>
+  runEvaluation: (payload: {
+    mode: ReviewMode;
+    provider: string;
+    corpusLabel?: string;
+    llmApiKey?: string;
+  }) =>
     call<EvaluationRun>("/evaluations", {
       method: "POST",
       body: JSON.stringify({
         mode: payload.mode,
         provider: payload.provider,
         corpus_label: payload.corpusLabel || undefined,
+        llm_api_key: payload.llmApiKey || undefined,
       }),
     }).then((r) => r.data),
   getEvaluation: (id: string) => call<EvaluationDetail>(`/evaluations/${id}`).then((r) => r.data),

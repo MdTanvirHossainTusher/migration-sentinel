@@ -43,7 +43,7 @@ public class MigrationReviewOrchestrator {
     }
 
     public Result review(MigrationInput input, TrajectoryRecorder recorder) {
-        LlmClient client = llmRegistry.resolve(input.provider());
+        LlmClient client = llmRegistry.resolve(input.provider(), input.llmApiKey());
         ReviewMode mode = input.mode();
         boolean wantsSandbox = mode != ReviewMode.BASELINE_PROMPT;
 

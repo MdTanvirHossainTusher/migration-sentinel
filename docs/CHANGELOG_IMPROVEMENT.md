@@ -13,10 +13,11 @@ runs all five stages over the corpus with the offline heuristic brain (determini
 API key) and prints it. The test also asserts the direction of every delta, so a
 regression fails CI.
 
-Stage 5 leaves the corpus numbers untouched by construction — every case has a handful of
-baseline files, so none of them exercise a real repository's history. Its evidence is a
-220-file service instead, and the reason the corpus could not see the defect is the most
-useful thing in this document.
+Stages 5 and 6 leave the corpus numbers untouched by construction — stage 5 is about the
+*shape* of the input (a real repo's whole history, not one baseline file) and stage 6 is
+about the *system around* the agent (queueing, audit, secrets, delivery). Their evidence is
+a 220-file service and a set of behavioural checks, not the F1 table — and the reason the
+corpus could not see those gaps is the most useful thing in this document.
 
 
 | Stage | What changed | P | R | F1 | FP/case | Cases passed |
@@ -27,6 +28,7 @@ useful thing in this document.
 | 3 · + verification pass | Every finding must cite tool output or it is dropped / flagged UNVERIFIED | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 4 · + analyzer/verifier split | A dedicated verifier agent with its own prompt and tools, so the analyzer never grades itself | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 | 5 · + whole migration history | Reviews against every prior migration in the repo, in Flyway order, in the schema they build | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
+| 6 · + productionization | Outbox→Kafka job queue, audit-event trail, log/audit redaction, per-request encrypted API keys, presigned report artifacts, bundled sandbox engine | 1.00 | 1.00 | 1.00 | 0.00 | 15 / 15 |
 
 ---
 
@@ -160,6 +162,53 @@ Three defects fell out of running it for real, none of which the corpus could ca
 this stage is about whether it can be pointed at a schema anyone actually has. Lesson: an
 evaluation corpus tells you your agent is right, not that your product is usable — the
 fixture shape (one small baseline file) was itself an assumption, and it hid a 400.
+
+## Stage 6 — Productionization
+
+**What we tried and why.** Stages 0–5 make the agent *correct*. Running the stack the way a
+team would exposed the gap between "the agent is right" and "the system is one a team would
+actually deploy and a judge can reproduce":
+
+- Submitting several evaluations in quick succession from the UI left them stuck `QUEUED`
+  forever. The controller fired an `@Async` method from inside its own `@Transactional`
+  method, so the worker thread routinely looked up the run before the writer had committed —
+  `Optional.orElseThrow()` threw `NoSuchElementException` and nothing retried.
+- Every review in `docker compose` said *"no sandbox ran"*. The backend mounted the host
+  Docker socket, but docker-java could not negotiate with Docker Desktop's proxy, so the
+  sandbox — the whole value proposition — silently degraded to structure-only.
+- There was no way to use a real model without baking a key into the server environment,
+  and no record of who ran what.
+
+**What changed.**
+
+| Concern | Before | After |
+| --- | --- | --- |
+| Job dispatch | `@Async` from inside `@Transactional` — raced the commit | `@TransactionalEventListener(AFTER_COMMIT)`; `local` transport in-process, `kafka` transport via a transactional outbox + `SKIP LOCKED` worker lease |
+| Transport | in-process only | outbox relayed to Kafka (immediate AFTER_COMMIT publish + scheduled sweep), consumed by a worker pool that scales with replicas |
+| Sandbox in compose | host socket mount → `sandbox_used: false` always | bundled `docker:dind` engine; `sandbox_used: true` out of the box |
+| Real-model keys | server env var only | optional per-request key, AES-GCM encrypted at rest, never returned, stripped from logs and audit |
+| Audit | one narrow `approval_record` table | `audit_event` trail for submit / complete / fail / rewrite / artifact, same-transaction, relayed on `migration-sentinel.audit` |
+| Secrets in output | logged verbatim | `MaskingConsoleAppender` + `SecretMasker` over console, audit payloads and persisted trajectories |
+| Report delivery | inline string in a JSON response | rendered `report.md` stored in object storage (RustFS), handed out as a presigned download URL; `POST /artifacts/uploads` + `/confirm` for user uploads with a configurable size cap |
+
+**Evidence.** Corpus F1 is unchanged (1.00 / 1.00 / 1.00, 15/15) — by construction, none of
+this touches how the agent reasons. The evidence is behavioural, from the standalone profile:
+
+```
+$ curl -XPOST .../api/v1/reviews -d '{...,"mode":"ANALYZER_READ_ONLY","provider":"heuristic"}'
+  → 202 QUEUED
+$ curl .../api/v1/reviews/$ID          → COMPLETED, 1 finding, 22 ms      (no stuck QUEUED)
+$ curl .../api/v1/audit-events         → review.submitted, review.completed
+$ curl -XPOST .../api/v1/reviews -d '{...,"provider":"openai","llm_api_key":"sk-…"}'
+  → review runs against the OpenAI API with that key; the row stores only ciphertext;
+    the key is absent from GET /reviews, the logs and the audit trail
+```
+
+**Decision.** Kept, all of it behind flags: `sentinel.messaging.transport=local` and
+`sentinel.s3.enabled=false` are the defaults, so `./gradlew test`, `bootRun` and the
+evaluation harness are unchanged. `docker compose up` turns everything on. Lesson: a
+reproducibility score is decided by the second person's first run — an agent that is right
+in a test they cannot start scores nothing.
 
 ---
 

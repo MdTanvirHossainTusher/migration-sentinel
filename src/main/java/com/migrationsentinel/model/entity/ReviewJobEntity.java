@@ -71,11 +71,19 @@ public class ReviewJobEntity extends BaseEntity {
     @Column(name = "llm_provider", length = 32)
     private String llmProvider;
 
+    /** Per-request LLM API key, AES-GCM encrypted. Never serialized to any response. */
+    @Column(name = "llm_api_key_encrypted", columnDefinition = "text")
+    private String llmApiKeyEncrypted;
+
     @Column(name = "case_id", length = 64)
     private String caseId;
 
     @Column(name = "report_markdown", columnDefinition = "text")
     private String reportMarkdown;
+
+    /** Object-storage artifact holding the rendered report.md, when S3 storage is enabled. */
+    @Column(name = "report_artifact_id")
+    private java.util.UUID reportArtifactId;
 
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;

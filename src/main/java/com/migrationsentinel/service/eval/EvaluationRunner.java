@@ -12,10 +12,10 @@ import com.migrationsentinel.repository.FindingRepository;
 import com.migrationsentinel.repository.ReviewJobRepository;
 import com.migrationsentinel.model.enums.ReviewMode;
 import com.migrationsentinel.service.ReviewRunner;
+import com.migrationsentinel.service.audit.AuditService;
 import com.migrationsentinel.service.sandbox.SandboxManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -35,10 +35,20 @@ public class EvaluationRunner {
     private final EvaluationScorer scorer;
     private final ReviewRunner reviewRunner;
     private final SandboxManager sandboxManager;
+    private final AuditService auditService;
 
-    @Async("reviewExecutor")
-    public void runAsync(UUID runId, List<String> caseIds) {
-        EvaluationRunEntity run = evaluationRunRepository.findById(runId).orElseThrow();
+    /**
+     * Executes one evaluation run to completion. Called on a worker thread — either the
+     * local dispatcher's pool or a Kafka consumer — always after the row that
+     * {@code EvaluationService.submit} wrote has committed, so the lookup below cannot miss.
+     */
+    public void run(UUID runId, List<String> caseIds) {
+        EvaluationRunEntity run = evaluationRunRepository.findById(runId)
+                .orElseThrow(() -> new IllegalStateException("evaluation run vanished: " + runId));
+        if (run.getStatus() == EvaluationStatus.COMPLETED || run.getStatus() == EvaluationStatus.FAILED) {
+            log.info("evaluation {} already {}, skipping redelivery", runId, run.getStatus());
+            return;
+        }
         try {
             List<EvaluationCase> cases = corpus.subset(caseIds);
             run.setStatus(EvaluationStatus.RUNNING);
@@ -61,6 +71,7 @@ public class EvaluationRunner {
                     job.setStatus(ReviewStatus.QUEUED);
                     job.setMode(run.getMode());
                     job.setLlmProvider(run.getLlmProvider());
+                    job.setLlmApiKeyEncrypted(run.getLlmApiKeyEncrypted());
                     job.setCaseId(testCase.id());
                     job.setMigrationFilename(testCase.id() + "/migration.sql");
                     job.setMigrationSql(testCase.migrationSql());
@@ -111,6 +122,15 @@ public class EvaluationRunner {
             run.setFinishedAt(Instant.now());
             evaluationRunRepository.saveAndFlush(run);
             log.info("evaluation {} complete: P={} R={} F1={}", runId, run.getPrecision(), run.getRecall(), run.getF1());
+            auditService.record("evaluation.completed", "evaluation", runId.toString(), "system",
+                    "mode " + run.getMode() + " scored F1=" + fmt(run.getF1()),
+                    java.util.Map.of(
+                            "mode", run.getMode().name(),
+                            "provider", String.valueOf(run.getLlmProvider()),
+                            "precision", String.valueOf(run.getPrecision()),
+                            "recall", String.valueOf(run.getRecall()),
+                            "f1", String.valueOf(run.getF1()),
+                            "totalCases", run.getTotalCases()));
 
         } catch (Exception ex) {
             log.error("evaluation {} failed", runId, ex);
@@ -118,7 +138,13 @@ public class EvaluationRunner {
             run.setErrorMessage(ex.getMessage());
             run.setFinishedAt(Instant.now());
             evaluationRunRepository.saveAndFlush(run);
+            auditService.record("evaluation.failed", "evaluation", runId.toString(), "system",
+                    String.valueOf(ex.getMessage()), java.util.Map.of("error", String.valueOf(ex.getMessage())));
         }
+    }
+
+    private String fmt(Double d) {
+        return d == null ? "n/a" : String.format("%.2f", d);
     }
 
     private Double ratio(int numerator, int denominator) {

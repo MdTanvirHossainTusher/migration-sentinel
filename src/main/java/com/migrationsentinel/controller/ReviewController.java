@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +57,20 @@ public class ReviewController {
     @Operation(summary = "Full review report: findings, evidence, Markdown and the agent trajectory")
     public ResponseEntity<ApiResponse<ReviewReportResponse>> report(@PathVariable UUID id) {
         return ResponseBuilder.ok(reviewService.getReport(id));
+    }
+
+    @GetMapping("/{id}/report.md")
+    @Operation(summary = "Download the report as report.md (redirects to a presigned URL when storage is on)")
+    public ResponseEntity<String> reportFile(@PathVariable UUID id) {
+        ReviewReportResponse report = reviewService.getReport(id);
+        if (report.reportDownloadUrl() != null) {
+            return ResponseEntity.status(302).header(HttpHeaders.LOCATION, report.reportDownloadUrl()).build();
+        }
+        String body = report.reportMarkdown() == null ? "# Report not ready\n" : report.reportMarkdown();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"report-" + id + ".md\"")
+                .contentType(MediaType.parseMediaType("text/markdown; charset=utf-8"))
+                .body(body);
     }
 
     @GetMapping

@@ -20,6 +20,7 @@ ext {
 	flywayVersion = '10.22.0'
 	springdocVersion = '2.8.4'
 	testcontainersBomVersion = '1.21.3'
+	awsSdkVersion = '2.28.16'
 }
 
 configurations {
@@ -41,6 +42,15 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
+
+	// Messaging: transactional outbox relayed to Kafka (default transport in the
+	// compose stack). The `local` transport needs none of this and excludes the
+	// Kafka auto-configuration entirely — see config/KafkaConfig.
+	implementation 'org.springframework.kafka:spring-kafka'
+
+	// Presigned object storage for downloadable report artifacts (RustFS / any S3 API).
+	implementation platform("software.amazon.awssdk:bom:${awsSdkVersion}")
+	implementation 'software.amazon.awssdk:s3'
 
 	// App metadata database
 	runtimeOnly 'org.postgresql:postgresql'

@@ -7,8 +7,8 @@ import com.migrationsentinel.config.properties.LlmProperties;
 import com.migrationsentinel.exception.LlmProviderException;
 import com.migrationsentinel.service.agent.ToolSpec;
 import com.migrationsentinel.service.support.AgentJsonMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -22,12 +22,33 @@ import java.util.UUID;
 /** Google Gemini generateContent client with function calling. Raw HTTP — no SDK dependency. */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class GeminiLlmClient implements LlmClient {
 
     private final LlmProperties properties;
     private final AgentJsonMapper mapper;
+    private final String apiKeyOverride;
     private final HttpClient http = HttpClient.newHttpClient();
+
+    @Autowired
+    public GeminiLlmClient(LlmProperties properties, AgentJsonMapper mapper) {
+        this(properties, mapper, null);
+    }
+
+    private GeminiLlmClient(LlmProperties properties, AgentJsonMapper mapper, String apiKeyOverride) {
+        this.properties = properties;
+        this.mapper = mapper;
+        this.apiKeyOverride = apiKeyOverride;
+    }
+
+    @Override
+    public LlmClient withApiKey(String apiKey) {
+        return new GeminiLlmClient(properties, mapper, apiKey);
+    }
+
+    private String apiKey() {
+        return apiKeyOverride != null && !apiKeyOverride.isBlank()
+                ? apiKeyOverride : properties.getGemini().getApiKey();
+    }
 
     @Override
     public String provider() {
@@ -36,13 +57,14 @@ public class GeminiLlmClient implements LlmClient {
 
     @Override
     public boolean available() {
-        return properties.getGemini().getApiKey() != null && !properties.getGemini().getApiKey().isBlank();
+        return apiKey() != null && !apiKey().isBlank();
     }
 
     @Override
     public LlmResponse chat(List<LlmMessage> messages, List<ToolSpec> tools) {
         if (!available()) {
-            throw new LlmProviderException("Gemini API key is not configured (sentinel.llm.gemini.api-key)");
+            throw new LlmProviderException("Gemini API key is not configured (sentinel.llm.gemini.api-key "
+                    + "or a per-request llm_api_key)");
         }
         try {
             ObjectNode body = mapper.createObjectNode();
@@ -77,7 +99,7 @@ public class GeminiLlmClient implements LlmClient {
             body.set("generationConfig", genConfig);
 
             String url = properties.getGemini().getBaseUrl() + "/models/" + properties.getGemini().getModel()
-                    + ":generateContent?key=" + properties.getGemini().getApiKey();
+                    + ":generateContent?key=" + apiKey();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .timeout(properties.getRequestTimeout())

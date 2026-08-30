@@ -25,6 +25,7 @@ export default function ReviewPage() {
   const [entitySource, setEntitySource] = useState("");
   const [mode, setMode] = useState<ReviewMode>("ANALYZER_VERIFIER_SPLIT");
   const [provider, setProvider] = useState("heuristic");
+  const [apiKey, setApiKey] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export default function ReviewPage() {
         entitySource,
         mode,
         provider,
+        llmApiKey: provider === "heuristic" ? undefined : apiKey.trim() || undefined,
       });
       window.location.href = `/reviews/${r.id}`;
     } catch (e) {
@@ -183,13 +185,12 @@ export default function ReviewPage() {
             <label>Reviewing brain</label>
             <select value={provider} onChange={(e) => setProvider(e.target.value)}>
               <option value="heuristic">heuristic — offline, no API key</option>
-              {(health?.available_providers || [])
-                .filter((p) => p !== "heuristic")
-                .map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
+              <option value="openai">
+                openai{(health?.available_providers || []).includes("openai") ? " — key on server" : ""}
+              </option>
+              <option value="gemini">
+                gemini{(health?.available_providers || []).includes("gemini") ? " — key on server" : ""}
+              </option>
             </select>
             <p className="muted hint">
               The deterministic rules and the sandbox run either way; the provider only changes who
@@ -197,6 +198,27 @@ export default function ReviewPage() {
             </p>
           </div>
         </div>
+
+        {provider !== "heuristic" && (
+          <div className="panel" style={{ marginTop: 10 }}>
+            <label>API key for this review</label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                (health?.available_providers || []).includes(provider)
+                  ? "leave blank to use the server's key"
+                  : `your ${provider} API key`
+              }
+            />
+            <p className="muted hint">
+              Used for this one review, encrypted at rest, never returned by the API and stripped from
+              logs and the audit trail. It is not stored in your browser.
+            </p>
+          </div>
+        )}
 
         <div className="actions">
           <button onClick={submit} disabled={busy || !candidate}>

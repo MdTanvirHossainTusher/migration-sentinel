@@ -102,12 +102,21 @@ export default function ReviewDetail({ params }: { params: Promise<{ id: string 
 
       {r.status === "COMPLETED" && (
         <>
-          <div style={{ display: "flex", gap: 10, margin: "18px 0" }}>
+          <div style={{ display: "flex", gap: 10, margin: "18px 0", alignItems: "center" }}>
             {(["report", "trajectory", "markdown"] as const).map((t) => (
               <button key={t} className={tab === t ? "" : "secondary"} onClick={() => setTab(t)}>
                 {t}
               </button>
             ))}
+            <a
+              className="linklike"
+              style={{ marginLeft: "auto" }}
+              href={report.report_download_url || `/proxy/api/v1/reviews/${id}/report.md`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              ↓ download report.md
+            </a>
           </div>
 
           {tab === "report" &&

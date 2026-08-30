@@ -10,6 +10,7 @@ import com.migrationsentinel.payload.request.ApplyRewriteRequest;
 import com.migrationsentinel.payload.response.ApprovalRecordResponse;
 import com.migrationsentinel.repository.ApprovalRecordRepository;
 import com.migrationsentinel.repository.FindingRepository;
+import com.migrationsentinel.service.audit.AuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,6 +37,7 @@ public class RewriteApplyService {
     private final FindingRepository findingRepository;
     private final ApprovalRecordRepository approvalRecordRepository;
     private final SentinelProperties properties;
+    private final AuditService auditService;
     private final DtoMapper mapper;
 
     @Transactional
@@ -84,7 +86,17 @@ public class RewriteApplyService {
             record.setApplied(false);
             record.setNote((request.note() == null ? "" : request.note() + " | ") + "write failed: " + ex.getMessage());
         }
-        return mapper.toApprovalResponse(approvalRecordRepository.save(record));
+        ApprovalRecordEntity persisted = approvalRecordRepository.save(record);
+        auditService.record("rewrite.applied", "review", finding.getReviewJob().getId().toString(),
+                request.approvedBy(),
+                "Rewrite for finding " + finding.getRuleCode() + " written to " + target.getFileName(),
+                java.util.Map.of(
+                        "findingId", finding.getId().toString(),
+                        "ruleCode", String.valueOf(finding.getRuleCode()),
+                        "approvedBy", request.approvedBy(),
+                        "targetPath", target.toString(),
+                        "applied", persisted.isApplied()));
+        return mapper.toApprovalResponse(persisted);
     }
 
     @Transactional(readOnly = true)

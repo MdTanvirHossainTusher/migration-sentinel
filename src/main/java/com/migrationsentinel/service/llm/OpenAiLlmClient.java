@@ -7,8 +7,8 @@ import com.migrationsentinel.config.properties.LlmProperties;
 import com.migrationsentinel.exception.LlmProviderException;
 import com.migrationsentinel.service.agent.ToolSpec;
 import com.migrationsentinel.service.support.AgentJsonMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -21,12 +21,33 @@ import java.util.List;
 /** OpenAI Chat Completions client with function calling. Raw HTTP — no SDK dependency. */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class OpenAiLlmClient implements LlmClient {
 
     private final LlmProperties properties;
     private final AgentJsonMapper mapper;
+    private final String apiKeyOverride;
     private final HttpClient http = HttpClient.newHttpClient();
+
+    @Autowired
+    public OpenAiLlmClient(LlmProperties properties, AgentJsonMapper mapper) {
+        this(properties, mapper, null);
+    }
+
+    private OpenAiLlmClient(LlmProperties properties, AgentJsonMapper mapper, String apiKeyOverride) {
+        this.properties = properties;
+        this.mapper = mapper;
+        this.apiKeyOverride = apiKeyOverride;
+    }
+
+    @Override
+    public LlmClient withApiKey(String apiKey) {
+        return new OpenAiLlmClient(properties, mapper, apiKey);
+    }
+
+    private String apiKey() {
+        return apiKeyOverride != null && !apiKeyOverride.isBlank()
+                ? apiKeyOverride : properties.getOpenai().getApiKey();
+    }
 
     @Override
     public String provider() {
@@ -35,13 +56,14 @@ public class OpenAiLlmClient implements LlmClient {
 
     @Override
     public boolean available() {
-        return properties.getOpenai().getApiKey() != null && !properties.getOpenai().getApiKey().isBlank();
+        return apiKey() != null && !apiKey().isBlank();
     }
 
     @Override
     public LlmResponse chat(List<LlmMessage> messages, List<ToolSpec> tools) {
         if (!available()) {
-            throw new LlmProviderException("OpenAI API key is not configured (sentinel.llm.openai.api-key)");
+            throw new LlmProviderException("OpenAI API key is not configured (sentinel.llm.openai.api-key "
+                    + "or a per-request llm_api_key)");
         }
         try {
             ObjectNode body = mapper.createObjectNode();
@@ -57,7 +79,7 @@ public class OpenAiLlmClient implements LlmClient {
                     .uri(URI.create(properties.getOpenai().getBaseUrl() + "/chat/completions"))
                     .timeout(properties.getRequestTimeout())
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + properties.getOpenai().getApiKey())
+                    .header("Authorization", "Bearer " + apiKey())
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                     .build();
 

@@ -9,6 +9,10 @@ import com.migrationsentinel.model.entity.ReviewJobEntity;
 import com.migrationsentinel.model.entity.ToolCallEntity;
 import com.migrationsentinel.model.enums.ReviewStatus;
 import com.migrationsentinel.mapper.DtoMapper;
+import com.migrationsentinel.messaging.JobSubmissionGateway;
+import com.migrationsentinel.service.artifact.ArtifactStorageService;
+import com.migrationsentinel.service.audit.AuditService;
+import com.migrationsentinel.service.support.CryptoService;
 import com.migrationsentinel.payload.common.PageResult;
 import com.migrationsentinel.payload.common.Pagination;
 import com.migrationsentinel.payload.dto.MigrationFile;
@@ -19,6 +23,7 @@ import com.migrationsentinel.repository.FindingRepository;
 import com.migrationsentinel.repository.ReviewJobRepository;
 import com.migrationsentinel.repository.ToolCallRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -34,7 +39,10 @@ public class ReviewService {
     private final ReviewJobRepository reviewJobRepository;
     private final FindingRepository findingRepository;
     private final ToolCallRepository toolCallRepository;
-    private final ReviewRunner reviewRunner;
+    private final JobSubmissionGateway jobGateway;
+    private final AuditService auditService;
+    private final CryptoService cryptoService;
+    private final ObjectProvider<ArtifactStorageService> artifactStorage;
     private final DtoMapper mapper;
     private final ObjectMapper objectMapper;
 
@@ -65,9 +73,16 @@ public class ReviewService {
         job.setSeedSql(blankToNull(request.seedSql()));
         job.setEntitySource(blankToNull(request.entitySource()));
         job.setLlmProvider(request.provider() == null || request.provider().isBlank() ? "heuristic" : request.provider());
+        job.setLlmApiKeyEncrypted(cryptoService.encrypt(request.llmApiKey()));
         job = reviewJobRepository.saveAndFlush(job);
 
-        reviewRunner.runAsync(job.getId());
+        auditService.record("review.submitted", "review", job.getId().toString(), "api",
+                "Review queued for " + (job.getMigrationFilename() == null ? "pasted SQL" : job.getMigrationFilename()),
+                java.util.Map.of(
+                        "mode", job.getMode().name(),
+                        "provider", job.getLlmProvider(),
+                        "baselineFileCount", job.getBaselineFileCount()));
+        jobGateway.submitReview(job.getId());
         return mapper.toReviewResponse(job, List.of());
     }
 
@@ -85,6 +100,7 @@ public class ReviewService {
         return new ReviewReportResponse(
                 mapper.toReviewResponse(job, findings),
                 job.getReportMarkdown(),
+                reportDownloadUrl(job),
                 findings.stream().map(mapper::toFindingResponse).toList(),
                 trajectory.stream().map(mapper::toToolCallResponse).toList());
     }
@@ -103,6 +119,19 @@ public class ReviewService {
     private ReviewJobEntity load(UUID id) {
         return reviewJobRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Review " + id + " not found"));
+    }
+
+    /** A presigned download URL for the stored report.md, or null when storage is off / not stored. */
+    public String reportDownloadUrl(ReviewJobEntity job) {
+        ArtifactStorageService storage = artifactStorage.getIfAvailable();
+        if (storage == null || job.getReportArtifactId() == null) {
+            return null;
+        }
+        try {
+            return storage.downloadUrl(job.getReportArtifactId());
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private String blankToNull(String s) {

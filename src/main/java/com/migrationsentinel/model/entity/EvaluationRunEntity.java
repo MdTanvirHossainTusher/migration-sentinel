@@ -32,6 +32,10 @@ public class EvaluationRunEntity extends BaseEntity {
     @Column(name = "llm_provider", length = 32)
     private String llmProvider;
 
+    /** Per-request LLM API key, AES-GCM encrypted. Never serialized to any response. */
+    @Column(name = "llm_api_key_encrypted", columnDefinition = "text")
+    private String llmApiKeyEncrypted;
+
     @Column(name = "corpus_label", length = 64)
     private String corpusLabel;
 

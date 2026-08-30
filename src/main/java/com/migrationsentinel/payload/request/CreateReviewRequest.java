@@ -53,7 +53,12 @@ public record CreateReviewRequest(
         ReviewMode mode,
 
         @Schema(description = "LLM provider: heuristic (offline default), openai, or gemini", defaultValue = "heuristic")
-        String provider
+        String provider,
+
+        @Size(max = 500)
+        @Schema(description = "Optional: your own API key for this one review, used instead of any "
+                + "server-configured key. Encrypted at rest, never returned, stripped from logs.")
+        String llmApiKey
 ) {
 
     /** Total SQL bytes a whole history may carry. A 440-file service sits near 3 MB. */

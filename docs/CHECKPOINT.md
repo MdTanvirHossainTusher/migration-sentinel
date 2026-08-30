@@ -22,11 +22,23 @@ Where the project stands, and what a next session should pick up.
   `EvaluationScorer` (severity-aware), `EvaluationRunner`, REST endpoints.
 - **Frontend** — Next.js 15 App Router: review submit + report + trajectory timeline +
   apply-rewrite flow; evaluation runner + baseline-vs-agent comparison + per-case table.
-- **Ops** — Dockerfile (backend + frontend), one-command `compose.yml` (mounts docker.sock
-  for Testcontainers), CI (`ci.yml`: unit / sandbox / evaluation smoke / frontend build),
-  `release-please.yml` + config + manifest, `pr-title.yml`.
-- **Docs** — this file, README, CHANGELOG_IMPROVEMENT, REPRODUCTION_GUIDE, EVALUATION,
-  AGENT_TRAJECTORIES, SAFETY_MODEL, HOT_TAKE.
+- **Stage 6 — productionization** — job dispatch moved to `@TransactionalEventListener(AFTER_COMMIT)`
+  behind a `JobSubmissionGateway` with two transports: `local` (in-process pool) and `kafka`
+  (transactional `outbox_event` → `OutboxRelay` immediate+sweep → `JobConsumer` with
+  `SKIP LOCKED` lease). `audit_event` trail written in-transaction, optionally relayed on
+  `migration-sentinel.audit`. `SecretMasker` + `MaskingConsoleAppender` over console / audit
+  / trajectories, patterns from `redaction.xml`. Per-request LLM key AES-GCM encrypted
+  (`CryptoService`), decrypted only by the worker. Presigned object storage
+  (`ArtifactStorageService`, RustFS/S3): `report.md` stored server-side + `/artifacts/uploads`
+  → `/confirm` with a configurable size cap. All off by default
+  (`sentinel.messaging.transport=local`, `sentinel.s3.enabled=false`).
+- **Ops** — Dockerfile (backend + frontend), one-command self-contained `compose.yml`
+  (bundles `docker:dind` for the sandbox, single-node Kafka, RustFS), CI (`ci.yml`: unit /
+  sandbox / evaluation smoke / frontend build), `release-please.yml` + config + manifest,
+  `pr-title.yml`.
+- **Docs** — this file, README, CHANGELOG_IMPROVEMENT, ARCHITECTURE, HACKATHON_EVALUATION,
+  REPRODUCTION_GUIDE, TEST_WITH_IDENTITY_MIGRATIONS, EVALUATION, AGENT_TRAJECTORIES,
+  SAFETY_MODEL, HOT_TAKE.
 - **Tests** — unit: `SqlScriptTest`, `DdlParserTest`, `StaticRuleScannerTest`. Sandbox
   (`@Tag("sandbox")`): `MigrationReplayerIT`, `EvaluationHarnessTest` (the measured-improvement
   assertion).

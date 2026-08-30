@@ -13,9 +13,12 @@ import com.migrationsentinel.repository.ToolCallRepository;
 import com.migrationsentinel.service.agent.MigrationReviewOrchestrator;
 import com.migrationsentinel.service.agent.RecordedToolCall;
 import com.migrationsentinel.service.agent.TrajectoryRecorder;
+import com.migrationsentinel.service.artifact.ArtifactStorageService;
+import com.migrationsentinel.service.audit.AuditService;
+import com.migrationsentinel.service.support.CryptoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -35,18 +38,16 @@ public class ReviewRunner {
     private final FindingRepository findingRepository;
     private final ToolCallRepository toolCallRepository;
     private final MigrationReviewOrchestrator orchestrator;
+    private final AuditService auditService;
+    private final CryptoService cryptoService;
+    private final ObjectProvider<ArtifactStorageService> artifactStorage;
 
-    @Async("reviewExecutor")
-    public void runAsync(UUID jobId) {
-        try {
-            execute(jobId);
-        } catch (Exception ex) {
-            log.error("review {} failed", jobId, ex);
-            markFailed(jobId, ex.getMessage());
-        }
-    }
-
-    /** Synchronous path used by the evaluation harness. */
+    /**
+     * Executes one review to completion. Invoked on a worker thread (the local dispatcher's
+     * pool or a Kafka consumer), always after {@code ReviewService.submit} has committed the
+     * row. Idempotent: a job that already finished is left alone, so an at-least-once
+     * redelivery does no harm.
+     */
     public ReviewJobEntity runSync(UUID jobId) {
         try {
             return execute(jobId);
@@ -59,6 +60,10 @@ public class ReviewRunner {
     private ReviewJobEntity execute(UUID jobId) {
         ReviewJobEntity job = reviewJobRepository.findById(jobId)
                 .orElseThrow(() -> new IllegalStateException("review job vanished: " + jobId));
+        if (job.getStatus() == ReviewStatus.COMPLETED || job.getStatus() == ReviewStatus.FAILED) {
+            log.info("review {} already {}, skipping redelivery", jobId, job.getStatus());
+            return job;
+        }
         job.setStatus(ReviewStatus.RUNNING);
         job.setStartedAt(Instant.now());
         reviewJobRepository.saveAndFlush(job);
@@ -66,7 +71,8 @@ public class ReviewRunner {
         MigrationInput input = new MigrationInput(
                 job.getMigrationFilename(), job.getMigrationSql(), job.getBaselineSql(),
                 MigrationHistory.split(job.getBaselineSql()), job.getTargetSchema(),
-                job.getSeedSql(), job.getEntitySource(), job.getMode(), job.getLlmProvider(), job.getCaseId());
+                job.getSeedSql(), job.getEntitySource(), job.getMode(), job.getLlmProvider(), job.getCaseId(),
+                cryptoService.decrypt(job.getLlmApiKeyEncrypted()));
 
         TrajectoryRecorder recorder = new TrajectoryRecorder();
         long start = System.currentTimeMillis();
@@ -84,7 +90,28 @@ public class ReviewRunner {
         job.setSandboxUsed(result.sandboxUsed());
         job.setSandboxNote(sandboxNote(result));
         job.setReportMarkdown(result.reportMarkdown());
-        return reviewJobRepository.saveAndFlush(job);
+
+        ArtifactStorageService storage = artifactStorage.getIfAvailable();
+        if (storage != null && result.reportMarkdown() != null && !result.reportMarkdown().isBlank()) {
+            try {
+                job.setReportArtifactId(storage.storeReport(
+                        job.getId(), "report-" + job.getId() + ".md", result.reportMarkdown()).getId());
+            } catch (RuntimeException ex) {
+                log.warn("could not store report artifact for review {}: {}", job.getId(), ex.getMessage());
+            }
+        }
+
+        ReviewJobEntity saved = reviewJobRepository.saveAndFlush(job);
+
+        auditService.record("review.completed", "review", saved.getId().toString(), "system",
+                saved.getFindingsCount() + " finding(s), sandbox " + (saved.isSandboxUsed() ? "used" : "not used"),
+                java.util.Map.of(
+                        "findingsCount", saved.getFindingsCount(),
+                        "toolCallCount", saved.getToolCallCount(),
+                        "sandboxUsed", saved.isSandboxUsed(),
+                        "durationMs", durationMs,
+                        "provider", String.valueOf(saved.getLlmProvider())));
+        return saved;
     }
 
     /**
@@ -148,7 +175,10 @@ public class ReviewRunner {
         job.setStatus(ReviewStatus.FAILED);
         job.setFinishedAt(Instant.now());
         job.setErrorMessage(trim(message, 4000));
-        return reviewJobRepository.saveAndFlush(job);
+        ReviewJobEntity saved = reviewJobRepository.saveAndFlush(job);
+        auditService.record("review.failed", "review", saved.getId().toString(), "system",
+                trim(message, 480), java.util.Map.of("error", String.valueOf(message)));
+        return saved;
     }
 
     private String nullSafe(String s) {
