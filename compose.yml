@@ -79,7 +79,9 @@ services:
     volumes:
       - sentinel_rustfs:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000 >/dev/null 2>&1 || exit 1"]
+      # RustFS answers the S3 API on :9000; an unauthenticated GET returns 403, which is a
+      # healthy server. `curl` without -f exits 0 for any HTTP response received.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:9000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
